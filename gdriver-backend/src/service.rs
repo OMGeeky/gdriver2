@@ -1,10 +1,9 @@
-use std::{sync::Arc, thread};
-
 use chrono::Duration;
 use gdriver_common::{
-    drive_structure::drive_id::ROOT_ID,
-    ipc::gdriver_service::{BackendActionError, BackendActionRequest, GDriverService},
+    drive_structure::drive_id::{DriveId, ROOT_ID},
+    ipc::gdriver_service::*,
 };
+use std::{path::PathBuf, sync::Arc, thread};
 use tokio::sync::Mutex;
 
 use crate::drive::Drive;
@@ -51,6 +50,30 @@ impl GDriverService for GdriverServer {
                 Ok(String::from("OK"))
             }
         }
+    }
+
+    async fn get_file_by_path(
+        self,
+        context: ::tarpc::context::Context,
+        path: PathBuf,
+    ) -> StdResult<DriveId, GetFileByPathError> {
+        todo!()
+    }
+
+    #[doc = " Returns true if the file was had remote changes and was updadet"]
+    async fn update_changes_for_file(
+        self,
+        context: ::tarpc::context::Context,
+        id: DriveId,
+    ) -> StdResult<bool, UpdateChangesError> {
+        todo!()
+    }
+
+    async fn update_changes(
+        self,
+        context: ::tarpc::context::Context,
+    ) -> StdResult<(), UpdateChangesError> {
+        todo!()
     }
 }
 async fn long_running_task(drive: &Arc<Mutex<Drive>>) {
