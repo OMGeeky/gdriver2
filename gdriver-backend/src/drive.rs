@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
-use gdriver_common::{drive_structure::drive_id::DriveId, prelude::CONFIGURATION};
 
 use crate::prelude::*;
 
