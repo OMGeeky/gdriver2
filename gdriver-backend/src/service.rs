@@ -15,6 +15,86 @@ struct GdriverServer {
     drive: Arc<Mutex<Drive>>,
 }
 impl GDriverService for GdriverServer {
+    async fn get_file_by_path(
+        self,
+        context: ::tarpc::context::Context,
+        path: PathBuf,
+    ) -> StdResult<DriveId, GetFileByPathError> {
+        todo!()
+    }
+
+    async fn write_local_change(
+        self,
+        context: ::tarpc::context::Context,
+        id: DriveId,
+    ) -> StdResult<(), WriteLocalChangeError> {
+        todo!()
+    }
+
+    async fn get_metadata_for_file(
+        self,
+        context: ::tarpc::context::Context,
+        id: DriveId,
+    ) -> StdResult<(), GetMetadataError> {
+        todo!()
+    }
+
+    async fn download_content_for_file(
+        self,
+        context: ::tarpc::context::Context,
+        id: DriveId,
+    ) -> StdResult<(), GetContentError> {
+        todo!()
+    }
+
+    async fn list_files_in_directory(
+        self,
+        context: ::tarpc::context::Context,
+        id: DriveId,
+    ) -> StdResult<(), GetFileListError> {
+        todo!()
+    }
+
+    async fn mark_file_as_deleted(
+        self,
+        context: ::tarpc::context::Context,
+        id: DriveId,
+    ) -> StdResult<(), MarkFileAsDeletedError> {
+        todo!()
+    }
+
+    async fn mark_file_for_keeping_local(
+        self,
+        context: ::tarpc::context::Context,
+        id: DriveId,
+    ) -> StdResult<(), MarkFileForKeepingLocalError> {
+        todo!()
+    }
+
+    async fn unmark_file_for_keeping_local(
+        self,
+        context: ::tarpc::context::Context,
+        id: DriveId,
+    ) -> StdResult<(), UnmarkFileForKeepingLocalError> {
+        todo!()
+    }
+
+    #[doc = " Returns true if the file was had remote changes and was updadet"]
+    async fn update_changes_for_file(
+        self,
+        context: ::tarpc::context::Context,
+        id: DriveId,
+    ) -> StdResult<bool, UpdateChangesError> {
+        todo!()
+    }
+
+    async fn update_changes(
+        self,
+        context: ::tarpc::context::Context,
+    ) -> StdResult<(), UpdateChangesError> {
+        todo!()
+    }
+
     async fn do_something2(
         self,
         _: ::tarpc::context::Context,
@@ -50,30 +130,6 @@ impl GDriverService for GdriverServer {
                 Ok(String::from("OK"))
             }
         }
-    }
-
-    async fn get_file_by_path(
-        self,
-        context: ::tarpc::context::Context,
-        path: PathBuf,
-    ) -> StdResult<DriveId, GetFileByPathError> {
-        todo!()
-    }
-
-    #[doc = " Returns true if the file was had remote changes and was updadet"]
-    async fn update_changes_for_file(
-        self,
-        context: ::tarpc::context::Context,
-        id: DriveId,
-    ) -> StdResult<bool, UpdateChangesError> {
-        todo!()
-    }
-
-    async fn update_changes(
-        self,
-        context: ::tarpc::context::Context,
-    ) -> StdResult<(), UpdateChangesError> {
-        todo!()
     }
 }
 async fn long_running_task(drive: &Arc<Mutex<Drive>>) {
