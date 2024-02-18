@@ -1,21 +1,29 @@
+use crate::prelude::*;
+use fuser::FileType;
+use gdriver_common::drive_structure::meta::{read_metadata_file, FileKind, Metadata};
 use std::collections::BTreeMap;
 use std::os::raw::c_int;
+use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tarpc::serde::{Deserialize, Serialize};
 
 type Inode = u64;
 const BLOCK_SIZE: u64 = 512;
-
-#[derive(Serialize, Deserialize, Copy, Clone, PartialEq)]
-enum FileKind {
-    File,
-    Directory,
-    Symlink,
+trait ConvertFileType {
+    fn from_ft(kind: FileType) -> Self;
+    fn into_ft(self) -> FileType;
 }
-
-impl From<FileKind> for fuser::FileType {
-    fn from(kind: FileKind) -> Self {
+impl ConvertFileType for FileKind {
+    fn from_ft(kind: fuser::FileType) -> Self {
         match kind {
+            FileType::Directory => FileKind::Directory,
+            FileType::RegularFile => FileKind::File,
+            FileType::Symlink => FileKind::Symlink,
+            _ => FileKind::File,
+        }
+    }
+    fn into_ft(self) -> fuser::FileType {
+        match self {
             FileKind::File => fuser::FileType::RegularFile,
             FileKind::Directory => fuser::FileType::Directory,
             FileKind::Symlink => fuser::FileType::Symlink,
@@ -31,7 +39,7 @@ enum XattrNamespace {
     User,
 }
 
-fn parse_xattr_namespace(key: &[u8]) -> Result<XattrNamespace, c_int> {
+fn parse_xattr_namespace(key: &[u8]) -> StdResult<XattrNamespace, c_int> {
     let user = b"user.";
     if key.len() < user.len() {
         return Err(libc::ENOTSUP);
@@ -90,7 +98,7 @@ fn time_from_system_time(system_time: &SystemTime) -> (i64, u32) {
 }
 
 #[derive(Serialize, Deserialize)]
-struct InodeAttributes {
+pub(crate) struct InodeAttributes {
     pub inode: Inode,
     pub open_file_handles: u64, // Ref count of open file handles to this inode
     pub size: u64,
@@ -104,6 +112,34 @@ struct InodeAttributes {
     pub uid: u32,
     pub gid: u32,
     pub xattrs: BTreeMap<Vec<u8>, Vec<u8>>,
+}
+pub(crate) fn read_inode_attributes_from_metadata(
+    metadata: Metadata,
+    inode: Inode,
+    open_file_handles: u64,
+) -> Result<InodeAttributes> {
+    Ok(InodeAttributes {
+        inode,
+        open_file_handles,
+        size: metadata.size,
+        last_accessed: metadata.last_accessed,
+        last_modified: metadata.last_modified,
+        last_metadata_changed: metadata.last_metadata_changed,
+        kind: metadata.kind,
+        mode: metadata.mode,
+        hardlinks: metadata.hardlinks,
+        uid: metadata.uid,
+        gid: metadata.gid,
+        xattrs: metadata.xattrs,
+    })
+}
+pub(crate) fn read_inode_attributes_from_meta_file(
+    meta_path: &Path,
+    inode: Inode,
+    open_file_handles: u64,
+) -> Result<InodeAttributes> {
+    let metadata = read_metadata_file(meta_path)?;
+    read_inode_attributes_from_metadata(metadata, inode, open_file_handles)
 }
 
 impl From<InodeAttributes> for fuser::FileAttr {
@@ -119,7 +155,7 @@ impl From<InodeAttributes> for fuser::FileAttr {
                 attrs.last_metadata_changed.1,
             ),
             crtime: SystemTime::UNIX_EPOCH,
-            kind: attrs.kind.into(),
+            kind: attrs.kind.into_ft(),
             perm: attrs.mode,
             nlink: attrs.hardlinks,
             uid: attrs.uid,
