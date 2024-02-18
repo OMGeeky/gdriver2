@@ -432,6 +432,7 @@ dependencies = [
  "futures",
  "lazy_static",
  "serde",
+ "serde_json",
  "tarpc",
  "thiserror",
  "tokio",

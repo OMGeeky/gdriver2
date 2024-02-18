@@ -15,5 +15,6 @@ confique={ version = "0.2" }
 thiserror = "1.0"
 anyhow = "1.0.79"
 directories = "5.0"
+serde_json = "1.0.111"
 #[patch.crates-io]
 #confique = {path="~/Documents/git/OMGeeky/confique "}

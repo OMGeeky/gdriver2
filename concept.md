@@ -27,11 +27,8 @@ the filename being the file id with no extension. The metadata will be on a file
 the meta folder, this file will always be created (or updated), no matter if only the content or only the metadata was 
 requested. 
 
-The meta file will be a simple UTF-8 file, containing a number from 0 to 2:
-
-- 0: only metadata was fetched, no content available
-- 1: content was fetched to cache
-- 2: content was fetched to downloads
+The meta file will be a simple UTF-8 json-file, containing the metadata of the file and the download state 
+(MetadataOnly/Cached/Downloaded)
 
 ---
 

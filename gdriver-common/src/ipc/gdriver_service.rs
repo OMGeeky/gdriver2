@@ -1,6 +1,6 @@
 use crate::prelude::*;
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -44,6 +44,17 @@ pub struct GDriverSettings {
     metadata_path: PathBuf,
     cache_path: PathBuf,
     downloaded_path: PathBuf,
+}
+impl GDriverSettings {
+    pub fn metadata_path(&self) -> &Path {
+        &self.metadata_path
+    }
+    pub fn cache_path(&self) -> &Path {
+        &self.cache_path
+    }
+    pub fn downloaded_path(&self) -> &Path {
+        &self.downloaded_path
+    }
 }
 
 impl Default for GDriverSettings {
