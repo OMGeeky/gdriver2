@@ -8,7 +8,14 @@ edition = "2021"
 [dependencies]
 tarpc.workspace = true
 tokio.workspace = true
+tracing.workspace = true
+serde.workspace = true
+anyhow = "1.0"
 futures-sink = "0.3.30"
+fuser = "0.14.0"
+bimap = "0.6"
+libc = "0.2.152"
+futures = "0.3"
 
 [dependencies.gdriver-common]
-path = "../gdriver-common/"
+path = "../gdriver-common"

@@ -12,6 +12,8 @@ tokio.workspace = true
 futures.workspace = true
 lazy_static.workspace = true
 confique={ version = "0.2" }
-
+thiserror = "1.0"
+anyhow = "1.0.79"
+directories = "5.0"
 #[patch.crates-io]
 #confique = {path="~/Documents/git/OMGeeky/confique "}
