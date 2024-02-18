@@ -418,6 +418,7 @@ dependencies = [
  "libc",
  "serde",
  "tarpc",
+ "thiserror",
  "tokio",
  "tracing",
 ]

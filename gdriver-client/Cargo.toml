@@ -16,6 +16,7 @@ fuser = "0.14.0"
 bimap = "0.6"
 libc = "0.2.152"
 futures = "0.3"
+thiserror = "1.0.56"
 
 [dependencies.gdriver-common]
 path = "../gdriver-common"

@@ -43,19 +43,19 @@ mod send_requests {
         }};
     }
     #[macro_export]
-    macro_rules! send_request_handled {
+    macro_rules! send_request_handled_internal {
         ($func:expr ,$reply:ident, $error_code:expr, $error_msg:expr, $($arg:tt)*) => {{
             let x = send_request!($func);
             reply_error_e!(x, $reply, $error_code, $error_msg, $($arg)*)
         }};
     }
     #[macro_export]
-    macro_rules! send_request_handled2 {
+    macro_rules! send_request_handled {
         ($func:expr ,$reply:ident) => {
-            send_request_handled2!($func, $reply, "")
+            send_request_handled!($func, $reply, "")
         };
         ($func:expr ,$reply:ident, $error_msg:expr) => {
-            send_request_handled!(
+            send_request_handled_internal!(
                 $func,
                 $reply,
                 ::libc::EREMOTEIO,
@@ -66,12 +66,12 @@ mod send_requests {
     }
 
     #[macro_export]
-    macro_rules! send_request_handled2_consuming {
+    macro_rules! send_request_handled_consuming {
         ($func:expr ,$reply:ident) => {
-            send_request_handled2_consuming!($func, $reply, "");
+            send_request_handled_consuming!($func, $reply, "");
         };
         ($func:expr ,$reply:ident, $error_msg:expr) => {
-            let _ = send_request_handled2!($func, $reply, $error_msg);
+            let _ = send_request_handled!($func, $reply, $error_msg);
         };
     }
 }

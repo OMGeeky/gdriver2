@@ -55,6 +55,16 @@ impl GDriverSettings {
     pub fn downloaded_path(&self) -> &Path {
         &self.downloaded_path
     }
+
+    pub fn get_metadata_file_path(&self, id: &DriveId) -> PathBuf {
+        self.metadata_path.join(id.as_ref()).with_extension("meta")
+    }
+    pub fn get_downloaded_file_path(&self, id: &DriveId) -> PathBuf {
+        self.downloaded_path.join(id.as_ref())
+    }
+    pub fn get_cache_file_path(&self, id: &DriveId) -> PathBuf {
+        self.cache_path.join(id.as_ref())
+    }
 }
 
 impl Default for GDriverSettings {

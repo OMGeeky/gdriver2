@@ -117,8 +117,8 @@ pub(crate) fn read_inode_attributes_from_metadata(
     metadata: Metadata,
     inode: Inode,
     open_file_handles: u64,
-) -> Result<InodeAttributes> {
-    Ok(InodeAttributes {
+) -> InodeAttributes {
+    InodeAttributes {
         inode,
         open_file_handles,
         size: metadata.size,
@@ -131,7 +131,7 @@ pub(crate) fn read_inode_attributes_from_metadata(
         uid: metadata.uid,
         gid: metadata.gid,
         xattrs: metadata.xattrs,
-    })
+    }
 }
 pub(crate) fn read_inode_attributes_from_meta_file(
     meta_path: &Path,
@@ -139,7 +139,11 @@ pub(crate) fn read_inode_attributes_from_meta_file(
     open_file_handles: u64,
 ) -> Result<InodeAttributes> {
     let metadata = read_metadata_file(meta_path)?;
-    read_inode_attributes_from_metadata(metadata, inode, open_file_handles)
+    Ok(read_inode_attributes_from_metadata(
+        metadata,
+        inode,
+        open_file_handles,
+    ))
 }
 
 impl From<InodeAttributes> for fuser::FileAttr {
