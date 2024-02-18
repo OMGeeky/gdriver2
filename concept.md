@@ -4,9 +4,13 @@
 
 ## Service
 
-The service is the one communicating with the google drive API. It will check for updates when it is asked, and it will download files when requested. 
+The service is the one communicating with the Google Drive API. It will check for updates when it is asked, and it will 
+download files when requested.
+
 It also uploads changes to local files.
-It also keeps track of what files should be kept locally and what files only get cached locally when accessed (important for offline access).
+
+It also keeps track of what files should be kept locally and what files only get cached locally when accessed (important 
+for offline access).
 
 It needs to be able to do the following:
 - Check for updates
