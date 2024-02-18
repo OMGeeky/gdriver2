@@ -10,6 +10,8 @@ async fn main() -> Result<()> {
     service::start().await?;
     Ok(())
 }
+pub mod prelude;
 mod sample;
 
+mod filesystem;
 mod service;
