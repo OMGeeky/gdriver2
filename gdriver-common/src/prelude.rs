@@ -8,3 +8,4 @@ pub mod result {
     pub use std::result::Result as StdResult;
 }
 pub(crate) use result::*;
+pub use tracing::{debug, error, info, instrument, trace, warn};
