@@ -1,9 +1,12 @@
 use chrono::Duration;
 use gdriver_common::{
     drive_structure::drive_id::{DriveId, ROOT_ID},
-    ipc::gdriver_service::*,
+    ipc::gdriver_service::{*, errors::*},
+
 };
 use std::{path::PathBuf, sync::Arc, thread};
+use std::ffi::OsString;
+use tarpc::context::Context;
 use tokio::sync::Mutex;
 
 use crate::drive::Drive;
@@ -15,9 +18,17 @@ struct GdriverServer {
     drive: Arc<Mutex<Drive>>,
 }
 impl GDriverService for GdriverServer {
+    async fn get_settings(self, context: Context) -> StdResult<GDriverSettings, GetSettingsError> {
+        todo!()
+    }
+
+    async fn get_file_by_name(self, context: Context, name: OsString, parent: DriveId) -> StdResult<DriveId, GetFileByPathError> {
+        todo!()
+    }
+
     async fn get_file_by_path(
         self,
-        context: ::tarpc::context::Context,
+        context: Context,
         path: PathBuf,
     ) -> StdResult<DriveId, GetFileByPathError> {
         todo!()
@@ -25,7 +36,7 @@ impl GDriverService for GdriverServer {
 
     async fn write_local_change(
         self,
-        context: ::tarpc::context::Context,
+        context: Context,
         id: DriveId,
     ) -> StdResult<(), WriteLocalChangeError> {
         todo!()
@@ -33,7 +44,7 @@ impl GDriverService for GdriverServer {
 
     async fn get_metadata_for_file(
         self,
-        context: ::tarpc::context::Context,
+        context: Context,
         id: DriveId,
     ) -> StdResult<(), GetMetadataError> {
         todo!()
@@ -41,7 +52,7 @@ impl GDriverService for GdriverServer {
 
     async fn download_content_for_file(
         self,
-        context: ::tarpc::context::Context,
+        context: Context,
         id: DriveId,
     ) -> StdResult<(), GetContentError> {
         todo!()
@@ -49,7 +60,7 @@ impl GDriverService for GdriverServer {
 
     async fn list_files_in_directory(
         self,
-        context: ::tarpc::context::Context,
+        context: Context,
         id: DriveId,
     ) -> StdResult<(), GetFileListError> {
         todo!()
@@ -57,7 +68,7 @@ impl GDriverService for GdriverServer {
 
     async fn mark_file_as_deleted(
         self,
-        context: ::tarpc::context::Context,
+        context: Context,
         id: DriveId,
     ) -> StdResult<(), MarkFileAsDeletedError> {
         todo!()
@@ -65,7 +76,7 @@ impl GDriverService for GdriverServer {
 
     async fn mark_file_for_keeping_local(
         self,
-        context: ::tarpc::context::Context,
+        context: Context,
         id: DriveId,
     ) -> StdResult<(), MarkFileForKeepingLocalError> {
         todo!()
@@ -73,7 +84,7 @@ impl GDriverService for GdriverServer {
 
     async fn unmark_file_for_keeping_local(
         self,
-        context: ::tarpc::context::Context,
+        context: Context,
         id: DriveId,
     ) -> StdResult<(), UnmarkFileForKeepingLocalError> {
         todo!()
@@ -82,7 +93,7 @@ impl GDriverService for GdriverServer {
     #[doc = " Returns true if the file was had remote changes and was updadet"]
     async fn update_changes_for_file(
         self,
-        context: ::tarpc::context::Context,
+        context: Context,
         id: DriveId,
     ) -> StdResult<bool, UpdateChangesError> {
         todo!()
@@ -90,14 +101,14 @@ impl GDriverService for GdriverServer {
 
     async fn update_changes(
         self,
-        context: ::tarpc::context::Context,
+        context: Context,
     ) -> StdResult<(), UpdateChangesError> {
         todo!()
     }
 
     async fn do_something2(
         self,
-        _: ::tarpc::context::Context,
+        _: Context,
         req: BackendActionRequest,
     ) -> std::result::Result<String, BackendActionError> {
         println!("You are connected from {}", self.socket_address);
