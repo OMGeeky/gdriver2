@@ -1,3 +1,4 @@
+
 use std::time;
 
 use gdriver_common::ipc::gdriver_service::{BackendActionRequest, GDriverServiceClient};
@@ -9,7 +10,11 @@ pub async fn start() -> Result<()> {
     let config = &CONFIGURATION;
     println!("Config: {:?}", **config);
     let client: GDriverServiceClient = create_client(config.ip, config.port).await?;
+    run_long_stuff_test(&client).await;
+    Ok(())
+}
 
+async fn ping(client: &GDriverServiceClient) -> Result<()>{
     let hello = client
         .do_something2(tarpc::context::current(), BackendActionRequest::Ping)
         .await;
@@ -17,9 +22,14 @@ pub async fn start() -> Result<()> {
         Ok(hello) => println!("Yay: {:?}", hello),
         Err(e) => {
             println!(":( {:?}", (e));
-            dbg!(e);
+            dbg!(&e);
+            return Err(Box::new(e));
         }
     }
+    Ok(())
+}
+#[allow(unused)]
+async fn run_long_stuff_test(client: &GDriverServiceClient) {
     let start = time::SystemTime::now();
     let hello = client
         .do_something2(tarpc::context::current(), BackendActionRequest::RunLong)
@@ -45,17 +55,18 @@ pub async fn start() -> Result<()> {
         Ok(hello) => println!("Start Long returned after {} seconds: {:?}", seconds, hello),
         Err(e) => println!(":( {:?}", (e)),
     }
-    Ok(())
 }
+
 pub async fn create_client(ip: IpAddr, port: u16) -> Result<GDriverServiceClient> {
     let server_addr = (ip, port);
     let transport = tarpc::serde_transport::tcp::connect(&server_addr, Json::default)
         .await
         .map_err(|e| {
-            println!("Could not connect");
+            println!("Could not connect to backend. Please make sure it is started before this app.");
             e
         })?;
     let service = GDriverServiceClient::new(client::Config::default(), transport);
     let client = service.spawn();
+    let _ = ping(&client).await;
     Ok(client)
 }
