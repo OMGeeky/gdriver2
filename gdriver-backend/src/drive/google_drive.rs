@@ -127,6 +127,22 @@ impl GoogleDrive {
         }
         Ok(files)
     }
+    #[instrument]
+    pub(crate) async fn get_meta_for_file(&self, id: &DriveId) -> Result<FileData> {
+        let (response, mut body) = self
+            .hub
+            .files()
+            .get(id.as_ref())
+            .supports_all_drives(false)
+            .param("fields", &FIELDS_FILE)
+            .doit()
+            .await?;
+        if response.status().is_success() {
+            self.map_in_file(Some(&mut body));
+            return Ok(FileData::convert_from_api_file(body));
+        }
+        Err("Error while fetching metadata".into())
+    }
 }
 
 impl GoogleDrive {

@@ -134,6 +134,8 @@ pub mod errors {
     pub enum GetMetadataError {
         #[error("Other")]
         Other,
+        #[error("Could not download meta")]
+        DownloadError,
     }
 
     #[derive(Debug, Serialize, Deserialize, thiserror::Error)]

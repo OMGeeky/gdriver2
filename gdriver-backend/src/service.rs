@@ -25,19 +25,24 @@ impl GDriverService for GdriverServer {
         Ok(())
     }
 
+    #[instrument(skip(self, _context))]
     async fn get_file_by_name(
         self,
-        context: Context,
+        _context: Context,
         name: OsString,
         parent: DriveId,
     ) -> StdResult<DriveId, GetFileByPathError> {
-        let mut drive_lock = self.drive.lock().await;
-        let x = drive_lock.path_resolver.get_id_from_parent_and_name(
-            name.to_str().ok_or(GetFileByPathError::InvalidName)?,
-            &parent,
-        );
+        let drive = self.drive.lock().await;
+        let name = name.to_str().ok_or(GetFileByPathError::InvalidName)?;
+        info!("Getting file with name '{}' under parent {}", name, parent);
+        let x = drive
+            .path_resolver
+            .get_id_from_parent_and_name(name, &parent);
         match x {
-            None => Err(GetFileByPathError::NotFound),
+            None => {
+                info!("Did not find {name}");
+                Err(GetFileByPathError::NotFound)
+            }
             Some(id) => Ok(id),
         }
     }
@@ -55,33 +60,47 @@ impl GDriverService for GdriverServer {
         }
     }
 
+    #[instrument(skip(self, context))]
     async fn write_local_change(
         self,
         context: Context,
         id: DriveId,
     ) -> StdResult<(), WriteLocalChangeError> {
+        error!("Not implemented");
         Err(WriteLocalChangeError::Other)
     }
 
     async fn get_metadata_for_file(
         self,
-        context: Context,
+        _context: Context,
         id: DriveId,
     ) -> StdResult<(), GetMetadataError> {
-        if id == *ROOT_ID {
+        info!("Getting metadata for {id}");
+        let meta_path = SETTINGS.get_metadata_file_path(&id);
+        // let meta_exists =
+        if meta_path.exists() {
             return Ok(());
         }
-        Err(GetMetadataError::Other)
+        info!("Meta was not downloaded. Getting from api");
+        let drive = self.drive.lock().await;
+        drive
+            .download_meta_for_file(&id)
+            .await
+            .map_err(|_| GetMetadataError::DownloadError)?;
+        Ok(())
     }
 
+    #[instrument(skip(self, context))]
     async fn download_content_for_file(
         self,
         context: Context,
         id: DriveId,
     ) -> StdResult<(), GetContentError> {
+        error!("Not implemented");
         Err(GetContentError::Other)
     }
 
+    #[instrument(skip(self, context))]
     async fn list_files_in_directory(
         self,
         context: Context,
@@ -107,36 +126,44 @@ impl GDriverService for GdriverServer {
         Ok(children.into_iter().skip(offset).collect())
     }
 
+    #[instrument(skip(self, context))]
     async fn mark_file_as_deleted(
         self,
         context: Context,
         id: DriveId,
     ) -> StdResult<(), MarkFileAsDeletedError> {
+        error!("Not implemented");
         Err(MarkFileAsDeletedError::Other)
     }
 
+    #[instrument(skip(self, context))]
     async fn mark_file_for_keeping_local(
         self,
         context: Context,
         id: DriveId,
     ) -> StdResult<(), MarkFileForKeepingLocalError> {
+        error!("Not implemented");
         Err(MarkFileForKeepingLocalError::Other)
     }
 
+    #[instrument(skip(self, context))]
     async fn unmark_file_for_keeping_local(
         self,
         context: Context,
         id: DriveId,
     ) -> StdResult<(), UnmarkFileForKeepingLocalError> {
+        error!("Not implemented");
         Err(UnmarkFileForKeepingLocalError::Other)
     }
 
-    #[doc = " Returns true if the file was had remote changes and was updadet"]
+    #[doc = " Returns true if the file was had remote changes and was updated"]
+    #[instrument(skip(self, context))]
     async fn update_changes_for_file(
         self,
         context: Context,
         id: DriveId,
     ) -> StdResult<bool, UpdateChangesError> {
+        error!("Not implemented");
         Err(UpdateChangesError::Other)
     }
 
@@ -158,6 +185,7 @@ impl GDriverService for GdriverServer {
         }
     }
 
+    #[instrument(skip(self))]
     async fn do_something2(
         self,
         _: Context,

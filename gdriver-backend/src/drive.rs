@@ -65,6 +65,11 @@ impl Drive {
 
         Ok(())
     }
+    pub async fn download_meta_for_file(&self, id: &DriveId) -> Result<()> {
+        let meta = self.google_drive.get_meta_for_file(id).await?;
+        write_metadata_file(&meta.into_meta()?)?;
+        Ok(())
+    }
 
     #[instrument(skip(self))]
     pub async fn update(&mut self) -> Result<()> {
