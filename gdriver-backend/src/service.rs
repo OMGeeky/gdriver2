@@ -16,9 +16,14 @@ struct GdriverServer {
     drive: Arc<Mutex<Drive>>,
 }
 impl GDriverService for GdriverServer {
-    // async fn get_settings(self, context: Context) -> StdResult<GDriverSettings, GetSettingsError> {
-    //     todo!()
-    // }
+    async fn set_offline_mode(
+        self,
+        _context: Context,
+        offline_mode: bool,
+    ) -> StdResult<(), GDriverServiceError> {
+        self.drive.lock().await.set_offline_mode(offline_mode);
+        Ok(())
+    }
 
     async fn get_file_by_name(
         self,
@@ -42,7 +47,12 @@ impl GDriverService for GdriverServer {
         context: Context,
         path: PathBuf,
     ) -> StdResult<DriveId, GetFileByPathError> {
-        Err(GetFileByPathError::Other)
+        let mut drive_lock = self.drive.lock().await;
+        let x = drive_lock.path_resolver.get_id_from_path(&path).await?;
+        match x {
+            None => Err(GetFileByPathError::NotFound),
+            Some(id) => Ok(id),
+        }
     }
 
     async fn write_local_change(
@@ -191,7 +201,7 @@ pub async fn start() -> Result<()> {
     let config = &CONFIGURATION;
     info!("Config: {:?}", **config);
 
-    let drive = Drive::new().await?;
+    let mut drive = Drive::new().await?;
     match drive.ping().await {
         Ok(_) => {
             info!("Can reach google drive api.");
@@ -201,7 +211,8 @@ pub async fn start() -> Result<()> {
             return Err(e);
         }
     }
-    let m = Arc::new(Mutex::new(drive));
+    drive.get_all_file_metas().await?;
+    let drive = Arc::new(Mutex::new(drive));
 
     let server_addr = (config.ip, config.port);
     let mut listener = tarpc::serde_transport::tcp::listen(&server_addr, Json::default).await?;
@@ -220,7 +231,7 @@ pub async fn start() -> Result<()> {
             let c = channel.transport().peer_addr().unwrap();
             let server = GdriverServer {
                 socket_address: c,
-                drive: m.clone(),
+                drive: drive.clone(),
             };
             channel.execute(server.serve()).for_each(spawn)
         })

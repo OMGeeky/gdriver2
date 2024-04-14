@@ -5,5 +5,6 @@ pub mod prelude;
 pub mod config;
 pub mod drive_structure;
 pub mod ipc;
+pub mod path_resolve_error;
 pub mod project_dirs;
 pub mod tracing_setup;

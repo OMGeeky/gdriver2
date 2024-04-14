@@ -1,24 +1,97 @@
 use crate::prelude::*;
+use chrono::{DateTime, Utc};
 use const_format::formatcp;
 use gdriver_common::{ipc::gdriver_service::SETTINGS, prelude::*};
+use google_drive3::api::File;
 use google_drive3::{
     api::{Change, Scope},
     hyper::{client::HttpConnector, Client},
     hyper_rustls::{self, HttpsConnector},
     oauth2, DriveHub,
 };
+use serde::{Deserialize, Serialize};
 use std::any::type_name;
 use std::fmt::{Debug, Display, Formatter};
 use tokio::fs;
 
 const FIELDS_FILE: &'static str = "id, name, size, mimeType, kind, md5Checksum, parents, trashed, createdTime, modifiedTime, viewedByMeTime";
+#[derive(Ord, PartialOrd, Eq, PartialEq, Debug, Serialize, Deserialize, Clone, Hash)]
+pub struct FileData {
+    pub id: String,
+    pub name: String,
+    pub size: Option<i64>,
+    pub mime_type: String,
+    pub kind: String,
+    pub md5_checksum: Option<String>,
+    pub parents: Option<Vec<String>>,
+    pub trashed: Option<bool>,
+    pub created_time: Option<DateTime<Utc>>,
+    pub modified_time: Option<DateTime<Utc>>,
+    pub viewed_by_me_time: Option<DateTime<Utc>>,
+}
+
+impl FileData {
+    fn convert_from_api_file(file: File) -> Self {
+        Self {
+            id: file.id.unwrap_or_default(),
+            name: file.name.unwrap_or_default(),
+            size: file.size,
+            mime_type: file.mime_type.unwrap_or_default(),
+            kind: file.kind.unwrap_or_default(),
+            md5_checksum: file.md5_checksum,
+            parents: file.parents,
+            trashed: file.trashed,
+            created_time: file.created_time,
+            modified_time: file.modified_time,
+            viewed_by_me_time: file.viewed_by_me_time,
+        }
+    }
+}
 const FIELDS_CHANGE: &str = formatcp!(
-    "nextPageToken, newStartPageToken, changes(removed, fileId, changeType, file({FIELDS_FILE}))"
+    "nextPageToken, newStartPageToken, changes(removed, fileId, changeType, file({}))",
+    FIELDS_FILE
 );
 #[derive(Clone)]
 pub struct GoogleDrive {
     hub: DriveHub<HttpsConnector<HttpConnector>>,
     changes_start_page_token: Option<String>,
+}
+
+impl GoogleDrive {
+    #[instrument]
+    pub(crate) async fn get_all_file_metas(&self) -> Result<Vec<FileData>> {
+        let mut page_token: Option<String> = None;
+        let mut files = Vec::new();
+        loop {
+            let (response, body) = self
+                .hub
+                .files()
+                .list()
+                .supports_all_drives(false)
+                .spaces("drive")
+                .page_token(&page_token.unwrap_or_default())
+                .param("fields", &format!("nextPageToken, files({})", FIELDS_FILE))
+                .doit()
+                .await?;
+            page_token = body.next_page_token;
+            if response.status().is_success() {
+                files.extend(
+                    body.files
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(FileData::convert_from_api_file),
+                );
+            } else {
+                error!("Could not get files: {:?}", response);
+                return Err("Could not get files".into());
+            }
+            if page_token.is_none() {
+                info!("No more pages");
+                break;
+            }
+        }
+        Ok(files)
+    }
 }
 
 impl GoogleDrive {
@@ -82,7 +155,7 @@ impl GoogleDrive {
     #[instrument]
     pub async fn get_changes(&mut self) -> Result<Vec<Change>> {
         info!("Getting changes");
-        let mut page_token = Some(self.change_start_token().await?);
+        let mut page_token = Some(self.get_change_start_token().await?);
         let mut changes = Vec::new();
         while let Some(current_page_token) = page_token {
             info!("Getting changes with page token: {}", current_page_token);
@@ -100,7 +173,7 @@ impl GoogleDrive {
                 .doit()
                 .await?;
             if let Some(token) = body.new_start_page_token {
-                self.changes_start_page_token = Some(token);
+                self.set_change_start_token(token).await?;
             }
             if response.status().is_success() {
                 changes.extend(body.changes.unwrap_or_default());
@@ -113,19 +186,21 @@ impl GoogleDrive {
         trace!("Got {} changes", changes.len());
         Ok(changes)
     }
+    async fn set_change_start_token(&mut self, token: String) -> Result<()> {
+        info!("Setting start page token: {}", token);
+        fs::write(SETTINGS.get_changes_file_path(), token.clone()).await?;
+        self.changes_start_page_token = Some(token);
+        Ok(())
+    }
 
-    async fn change_start_token(&mut self) -> Result<String> {
+    pub async fn get_change_start_token(&mut self) -> Result<String> {
         Ok(match &self.changes_start_page_token {
             None => {
                 info!("Getting start page token");
-                let token = fs::read_to_string(SETTINGS.get_changes_file_path())
-                    .await
-                    .unwrap_or_default();
-                self.changes_start_page_token = if !token.is_empty() {
-                    Some(token)
-                } else {
-                    Some(self.get_changes_start_token_from_api().await?)
-                };
+                let has_local_token = self.has_local_change_token().await;
+                if !has_local_token {
+                    self.update_change_start_token_from_api().await?;
+                }
                 info!("Got start page token: {:?}", self.changes_start_page_token);
                 self.changes_start_page_token
                     .clone()
@@ -137,7 +212,22 @@ impl GoogleDrive {
             }
         })
     }
-    async fn get_changes_start_token_from_api(&self) -> Result<String> {
+
+    pub(crate) async fn has_local_change_token(&mut self) -> bool {
+        !self
+            .get_local_change_start_token()
+            .await
+            .unwrap_or_default()
+            .is_empty()
+    }
+
+    pub async fn get_local_change_start_token(&mut self) -> Option<String> {
+        self.changes_start_page_token = fs::read_to_string(SETTINGS.get_changes_file_path())
+            .await
+            .ok();
+        self.changes_start_page_token.clone()
+    }
+    async fn update_change_start_token_from_api(&mut self) -> Result<()> {
         info!("Getting start page token from API");
         let (response, body) = self
             .hub
@@ -147,8 +237,9 @@ impl GoogleDrive {
             .doit()
             .await?;
         if response.status().is_success() {
-            let start_page_token = body.start_page_token.unwrap_or_default();
-            Ok(start_page_token)
+            let token = body.start_page_token.clone().unwrap_or_default();
+            self.set_change_start_token(token).await?;
+            Ok(())
         } else {
             Err("Could not get start page token".into())
         }

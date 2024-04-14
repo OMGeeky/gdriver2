@@ -4,6 +4,7 @@ use tokio::sync::mpsc::{channel, Sender};
 
 use crate::filesystem::{Filesystem, ShutdownRequest};
 use gdriver_common::{ipc::sample::*, prelude::*};
+use tarpc::context::Context;
 use tarpc::{client, tokio_serde::formats::Json};
 use tokio::task::JoinHandle;
 
@@ -15,10 +16,11 @@ async fn main() -> Result<()> {
     // service::start().await?;
     let mount_options = &[MountOption::RW];
     let (tx, rx) = channel(1);
-    let f = Filesystem::new(
-        service::create_client(CONFIGURATION.ip, CONFIGURATION.port).await?,
-        rx,
-    );
+    let gdriver_client = service::create_client(CONFIGURATION.ip, CONFIGURATION.port).await?;
+    gdriver_client
+        .set_offline_mode(Context::current(), true) //TODO make this configurable
+        .await??;
+    let f = Filesystem::new(gdriver_client, rx);
     mount(f, &"/var/tmp/gdriver2_mount", mount_options, tx)
         .await?
         .await?;

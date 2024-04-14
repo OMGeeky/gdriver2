@@ -10,6 +10,7 @@ use std::path::PathBuf;
 
 #[tarpc::service]
 pub trait GDriverService {
+    async fn set_offline_mode(offline_mode: bool) -> StdResult<(), GDriverServiceError>;
     async fn get_file_by_name(
         name: OsString,
         parent: DriveId,
@@ -52,6 +53,7 @@ lazy_static! {
 
 pub mod errors {
     use super::*;
+    use crate::path_resolve_error::PathResolveError;
     #[derive(Debug, Serialize, Deserialize, thiserror::Error)]
     pub enum GDriverServiceError {
         #[error("Error getting the settings: {0}")]
@@ -102,6 +104,8 @@ pub mod errors {
         NotFound,
         #[error("Could not update drive info")]
         Update(String),
+        #[error("Could not resolve path")]
+        PathResolve(#[from] PathResolveError),
     }
 
     #[derive(Debug, Serialize, Deserialize, thiserror::Error)]
