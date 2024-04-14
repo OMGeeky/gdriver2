@@ -1,26 +1,24 @@
+use super::*;
+use crate::drive::Drive;
 use chrono::Duration;
 use gdriver_common::{
     drive_structure::drive_id::{DriveId, ROOT_ID},
-    ipc::gdriver_service::{*, errors::*},
-
+    ipc::gdriver_service::{errors::*, *},
 };
-use std::{path::PathBuf, sync::Arc, thread};
 use std::ffi::OsString;
+use std::{path::PathBuf, sync::Arc, thread};
 use tarpc::context::Context;
 use tokio::sync::Mutex;
 
-use crate::drive::Drive;
-
-use super::*;
 #[derive(Clone)]
 struct GdriverServer {
     socket_address: SocketAddr,
     drive: Arc<Mutex<Drive>>,
 }
 impl GDriverService for GdriverServer {
-    async fn get_settings(self, context: Context) -> StdResult<GDriverSettings, GetSettingsError> {
-        todo!()
-    }
+    // async fn get_settings(self, context: Context) -> StdResult<GDriverSettings, GetSettingsError> {
+    //     todo!()
+    // }
 
     async fn get_file_by_name(self, context: Context, name: OsString, parent: DriveId) -> StdResult<DriveId, GetFileByPathError> {
         todo!()
@@ -62,8 +60,17 @@ impl GDriverService for GdriverServer {
         self,
         context: Context,
         id: DriveId,
-    ) -> StdResult<(), GetFileListError> {
-        todo!()
+    ) -> StdResult<Vec<ReadDirResult>, GetFileListError> {
+        Err(GetFileListError::Other)
+    }
+
+    async fn list_files_in_directory_with_offset(
+        self,
+        context: Context,
+        id: DriveId,
+        offset: u64,
+    ) -> StdResult<Vec<ReadDirResult>, GetFileListError> {
+        Err(GetFileListError::Other)
     }
 
     async fn mark_file_as_deleted(
@@ -99,11 +106,21 @@ impl GDriverService for GdriverServer {
         todo!()
     }
 
-    async fn update_changes(
-        self,
-        context: Context,
-    ) -> StdResult<(), UpdateChangesError> {
-        todo!()
+    async fn update_changes(self, context: Context) -> StdResult<(), UpdateChangesError> {
+        let drive = self.drive.try_lock();
+        match drive {
+            Ok(mut drive) => {
+                drive.update().await.map_err(|e| {
+                    info!("Error while updating: {e}");
+                    dbg!(e);
+                    UpdateChangesError::Remote
+                })?;
+            }
+            Err(_) => {
+                return Err(UpdateChangesError::Running);
+            }
+        }
+        Ok(())
     }
 
     async fn do_something2(
@@ -111,32 +128,32 @@ impl GDriverService for GdriverServer {
         _: Context,
         req: BackendActionRequest,
     ) -> std::result::Result<String, BackendActionError> {
-        println!("You are connected from {}", self.socket_address);
+        info!("You are connected from {}", self.socket_address);
 
         match req {
             BackendActionRequest::ShutdownGracefully => {
-                println!("Shutdown request received, but I dont want to.");
+                info!("Shutdown request received, but I dont want to.");
                 Err(BackendActionError::CouldNotComplete)
                 //Ok(String::from("OK. Shutting down"))
             }
             BackendActionRequest::UpdateChanges => {
-                println!("UpdateChanges request received");
+                info!("UpdateChanges request received");
                 let drive = &self.drive;
                 print_sample_tracking_state(drive).await;
 
                 Ok(String::from("OK"))
             }
             BackendActionRequest::Ping => {
-                println!("Ping request received");
+                info!("Ping request received");
                 Ok(String::from("Pong"))
             }
             BackendActionRequest::RunLong => {
-                println!("RunLong request received");
+                info!("RunLong request received");
                 long_running_task(&self.drive).await;
                 Ok(String::from("OK"))
             }
             BackendActionRequest::StartLong => {
-                println!("StartLong request received");
+                info!("StartLong request received");
                 tokio::spawn(async move { long_running_task(&self.drive).await });
                 Ok(String::from("OK"))
             }
@@ -153,9 +170,9 @@ async fn print_sample_tracking_state(drive: &Arc<Mutex<Drive>>) {
     dbg!(state);
 }
 pub async fn start() -> Result<()> {
-    println!("Hello, world!");
+    info!("Hello, world!");
     let config = &CONFIGURATION;
-    println!("Config: {:?}", **config);
+    info!("Config: {:?}", **config);
 
     let drive = Drive::new();
     let m = Arc::new(Mutex::new(drive));
@@ -164,7 +181,7 @@ pub async fn start() -> Result<()> {
     let mut listener = tarpc::serde_transport::tcp::listen(&server_addr, Json::default).await?;
     listener.config_mut().max_frame_length(usize::MAX);
 
-    println!("Listening");
+    info!("Listening");
     listener
         // Ignore accept errors.
         .filter_map(|r| future::ready(r.ok()))

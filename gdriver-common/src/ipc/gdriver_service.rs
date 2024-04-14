@@ -1,14 +1,15 @@
-use crate::prelude::*;
-use std::ffi::OsString;
-use std::path::{Path, PathBuf};
-
-use serde::{Deserialize, Serialize};
-
 use crate::drive_structure::drive_id::DriveId;
+use crate::drive_structure::meta::FileKind;
+use crate::ipc::gdriver_settings::GDriverSettings;
+use crate::prelude::*;
+use errors::*;
+use lazy_static::lazy_static;
+use serde::{Deserialize, Serialize};
+use std::ffi::OsString;
+use std::path::PathBuf;
 
 #[tarpc::service]
 pub trait GDriverService {
-    async fn get_settings() -> StdResult<GDriverSettings, GetSettingsError>;
     async fn get_file_by_name(
         name: OsString,
         parent: DriveId,
@@ -17,7 +18,13 @@ pub trait GDriverService {
     async fn write_local_change(id: DriveId) -> StdResult<(), WriteLocalChangeError>;
     async fn get_metadata_for_file(id: DriveId) -> StdResult<(), GetMetadataError>;
     async fn download_content_for_file(id: DriveId) -> StdResult<(), GetContentError>;
-    async fn list_files_in_directory(id: DriveId) -> StdResult<(), GetFileListError>;
+    async fn list_files_in_directory(
+        id: DriveId,
+    ) -> StdResult<Vec<ReadDirResult>, GetFileListError>;
+    async fn list_files_in_directory_with_offset(
+        id: DriveId,
+        offset: u64,
+    ) -> StdResult<Vec<ReadDirResult>, GetFileListError>;
     async fn mark_file_as_deleted(id: DriveId) -> StdResult<(), MarkFileAsDeletedError>;
     async fn mark_file_for_keeping_local(
         id: DriveId,
@@ -39,49 +46,10 @@ pub enum BackendActionRequest {
     StartLong,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct GDriverSettings {
-    metadata_path: PathBuf,
-    cache_path: PathBuf,
-    downloaded_path: PathBuf,
-}
-impl GDriverSettings {
-    pub fn metadata_path(&self) -> &Path {
-        &self.metadata_path
-    }
-    pub fn cache_path(&self) -> &Path {
-        &self.cache_path
-    }
-    pub fn downloaded_path(&self) -> &Path {
-        &self.downloaded_path
-    }
-
-    pub fn get_metadata_file_path(&self, id: &DriveId) -> PathBuf {
-        self.metadata_path.join(id.as_ref()).with_extension("meta")
-    }
-    pub fn get_downloaded_file_path(&self, id: &DriveId) -> PathBuf {
-        self.downloaded_path.join(id.as_ref())
-    }
-    pub fn get_cache_file_path(&self, id: &DriveId) -> PathBuf {
-        self.cache_path.join(id.as_ref())
-    }
+lazy_static! {
+    pub static ref SETTINGS: GDriverSettings = GDriverSettings::default();
 }
 
-impl Default for GDriverSettings {
-    fn default() -> Self {
-        let p = directories::ProjectDirs::from("com", "OMGeeky", "gdriver2").expect(
-            "Getting the Project dir needs to work (on all platforms) otherwise nothing will work as expected. \
-            This is where all files will be stored, so there is not much use for this app without it.",
-        );
-        Self {
-            metadata_path: p.data_dir().join("meta"),
-            downloaded_path: p.data_dir().join("downloads"),
-            cache_path: p.cache_dir().to_path_buf(),
-        }
-    }
-}
-
-use errors::*;
 pub mod errors {
     use super::*;
     #[derive(Debug, Serialize, Deserialize, thiserror::Error)]
@@ -125,10 +93,26 @@ pub mod errors {
     }
 
     #[derive(Debug, Serialize, Deserialize, thiserror::Error)]
-    pub enum GetFileByPathError {}
+    pub enum GetFileByPathError {
+        #[error("Other")]
+        Other,
+        #[error("The Specified name is invalid")]
+        InvalidName,
+        #[error("Could not find name specified")]
+        NotFound,
+        #[error("Could not update drive info")]
+        Update(String),
+    }
 
     #[derive(Debug, Serialize, Deserialize, thiserror::Error)]
-    pub enum UpdateChangesError {}
+    pub enum UpdateChangesError {
+        #[error("Other")]
+        Other,
+        #[error("Remote error")]
+        Remote,
+        #[error("Already running")]
+        Running,
+    }
 
     #[derive(Debug, Serialize, Deserialize, thiserror::Error)]
     pub enum WriteLocalChangeError {
@@ -143,22 +127,47 @@ pub mod errors {
     }
 
     #[derive(Debug, Serialize, Deserialize, thiserror::Error)]
-    pub enum GetMetadataError {}
+    pub enum GetMetadataError {
+        #[error("Other")]
+        Other,
+    }
 
     #[derive(Debug, Serialize, Deserialize, thiserror::Error)]
-    pub enum GetContentError {}
+    pub enum GetContentError {
+        #[error("Other")]
+        Other,
+    }
 
     //#[derive(Debug, Serialize, Deserialize)]
     //pub enum GetContentError {}
     #[derive(Debug, Serialize, Deserialize, thiserror::Error)]
-    pub enum GetFileListError {}
+    pub enum GetFileListError {
+        #[error("Other")]
+        Other,
+    }
 
     #[derive(Debug, Serialize, Deserialize, thiserror::Error)]
-    pub enum MarkFileAsDeletedError {}
+    pub enum MarkFileAsDeletedError {
+        #[error("Other")]
+        Other,
+    }
 
     #[derive(Debug, Serialize, Deserialize, thiserror::Error)]
-    pub enum MarkFileForKeepingLocalError {}
+    pub enum MarkFileForKeepingLocalError {
+        #[error("Other")]
+        Other,
+    }
 
     #[derive(Debug, Serialize, Deserialize, thiserror::Error)]
-    pub enum UnmarkFileForKeepingLocalError {}
+    pub enum UnmarkFileForKeepingLocalError {
+        #[error("Other")]
+        Other,
+    }
+}
+
+#[derive(Ord, PartialOrd, Eq, PartialEq, Debug, Serialize, Deserialize, Clone, Hash)]
+pub struct ReadDirResult {
+    pub id: DriveId,
+    pub kind: FileKind,
+    pub name: String,
 }

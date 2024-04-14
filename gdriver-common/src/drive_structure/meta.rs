@@ -3,8 +3,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::path::Path;
+
 pub type TIMESTAMP = (i64, u32);
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+
+#[derive(Ord, PartialOrd, Eq, PartialEq, Debug, Serialize, Deserialize, Clone, Hash)]
 pub struct Metadata {
     pub state: FileState,
     pub size: u64,
@@ -26,14 +28,14 @@ pub fn write_metadata_file(path: &Path, metadata: &Metadata) -> Result<()> {
     let reader = File::open(path)?;
     Ok(serde_json::to_writer(reader, metadata)?)
 }
-#[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Debug)]
+#[derive(Ord, PartialOrd, Eq, PartialEq, Debug, Serialize, Deserialize, Clone, Hash)]
 pub enum FileState {
     Downloaded,
     Cached,
     MetadataOnly,
 }
 
-#[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Debug)]
+#[derive(Ord, PartialOrd, Eq, PartialEq, Debug, Serialize, Deserialize, Clone, Hash)]
 pub enum FileKind {
     File,
     Directory,

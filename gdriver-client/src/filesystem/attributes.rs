@@ -9,7 +9,7 @@ use tarpc::serde::{Deserialize, Serialize};
 
 type Inode = u64;
 const BLOCK_SIZE: u64 = 512;
-trait ConvertFileType {
+pub trait ConvertFileType {
     fn from_ft(kind: FileType) -> Self;
     fn into_ft(self) -> FileType;
 }

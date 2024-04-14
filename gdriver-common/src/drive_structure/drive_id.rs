@@ -5,7 +5,7 @@ use std::fmt::{Display, Formatter};
 lazy_static! {
     pub static ref ROOT_ID: DriveId = DriveId(String::from("root"));
 }
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Ord, PartialOrd, Eq, PartialEq, Debug, Serialize, Deserialize, Clone, Hash)]
 pub struct DriveId(pub String);
 
 impl<T> From<T> for DriveId

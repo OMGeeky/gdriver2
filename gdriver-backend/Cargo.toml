@@ -6,13 +6,16 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-fuser={ version = "0.14", default_features = true, features = ["serializable"] }
 tracing.workspace = true
 tokio.workspace = true
 serde.workspace = true
 tarpc.workspace = true
 futures.workspace = true
 chrono.workspace = true
+lazy_static = "1.4.0"
+thiserror = "1.0.56"
+google-drive3 = "5.0.4"
+const_format = "0.2"
 
 [dependencies.gdriver-common]
-path = "../gdriver-common/"
+path = "../gdriver-common"
