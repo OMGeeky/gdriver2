@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use crate::drive::google_drive::GoogleDrive;
 use crate::path_resolver::PathResolver;
 use chrono::{DateTime, Utc};
+use gdriver_common::drive_structure::meta::{write_metadata_file, write_metadata_file_to_path};
+use gdriver_common::ipc::gdriver_service::ReadDirResult;
 
 use crate::prelude::*;
 mod google_drive;
@@ -36,19 +38,29 @@ impl Drive {
 
     #[instrument(skip(self))]
     pub async fn get_all_file_metas(&mut self) -> Result<()> {
-        if self.offline_mode {
-            info!("Offline mode, skipping get_all_file_metas");
-            //TODO: load from local storage
-            return Ok(());
-        }
         let has_existing_token = self.google_drive.has_local_change_token().await;
+        //TODO: show an error when offline and no local data exists
         if !has_existing_token {
-            //only get start token & data if we shouldn't have it
+            //only get start token & data if this is the first time & we don't have it
             self.google_drive.get_change_start_token().await?;
-            let x = self.google_drive.get_all_file_metas().await?;
-            dbg!(&x);
+            let files = self.google_drive.get_all_file_metas().await?;
+
+            self.path_resolver.reset()?;
+            for file in files {
+                for parent in file.parents.clone() {
+                    let relation_data = ReadDirResult {
+                        id: file.id.clone().into(),
+                        name: file.name.clone(),
+                        kind: file.kind.clone(),
+                    };
+                    self.path_resolver
+                        .add_relationship(parent.into(), relation_data)?;
+                }
+                let meta = file.into_meta()?;
+                write_metadata_file(&meta)?;
+            }
         } else {
-            //TODO: get file metas from local storage
+            self.path_resolver.load_from_disk()?;
         }
 
         Ok(())

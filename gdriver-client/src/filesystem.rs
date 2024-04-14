@@ -10,6 +10,7 @@ use gdriver_common::drive_structure::drive_id::ROOT_ID;
 use gdriver_common::ipc::gdriver_service::errors::GDriverServiceError;
 use gdriver_common::ipc::gdriver_service::GDriverServiceClient;
 use gdriver_common::ipc::gdriver_service::SETTINGS;
+use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
@@ -22,6 +23,15 @@ mod macros;
 
 //TODO2: Decide if this is a good TTL
 const TTL: Duration = Duration::from_secs(2);
+const GROUP_NAME: &str = "gdriver2";
+lazy_static! {
+    pub static ref USER_ID: u32 = uzers::get_current_uid();
+    pub static ref GDRIVER_GROUP_ID: u32 = uzers::get_group_by_name(GROUP_NAME)
+        .expect(&format!(
+            "Please create the group '{GROUP_NAME}' and add the user to it."
+        ))
+        .gid();
+}
 
 type Inode = u64;
 
@@ -321,7 +331,7 @@ mod utils {
             let res = send_request!(fs.gdriver_client.list_files_in_directory_with_offset(
                 current_context(),
                 id,
-                offset as u64
+                offset as usize
             ))?
             .map_err(GDriverServiceError::from)?;
             Ok(res)

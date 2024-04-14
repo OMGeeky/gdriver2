@@ -510,6 +510,7 @@ dependencies = [
  "google-drive3",
  "lazy_static",
  "serde",
+ "serde_json",
  "tarpc",
  "thiserror",
  "tokio",
@@ -526,12 +527,14 @@ dependencies = [
  "futures",
  "futures-sink",
  "gdriver-common",
+ "lazy_static",
  "libc",
  "serde",
  "tarpc",
  "thiserror",
  "tokio",
  "tracing",
+ "uzers",
 ]
 
 [[package]]
@@ -539,6 +542,7 @@ name = "gdriver-common"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "confique",
  "directories",
  "futures",
@@ -1983,6 +1987,16 @@ dependencies = [
  "form_urlencoded",
  "idna 0.5.0",
  "percent-encoding 2.3.1",
+]
+
+[[package]]
+name = "uzers"
+version = "0.11.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76d283dc7e8c901e79e32d077866eaf599156cbf427fffa8289aecc52c5c3f63"
+dependencies = [
+ "libc",
+ "log",
 ]
 
 [[package]]

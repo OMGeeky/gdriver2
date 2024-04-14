@@ -24,7 +24,7 @@ pub trait GDriverService {
     ) -> StdResult<Vec<ReadDirResult>, GetFileListError>;
     async fn list_files_in_directory_with_offset(
         id: DriveId,
-        offset: u64,
+        offset: usize,
     ) -> StdResult<Vec<ReadDirResult>, GetFileListError>;
     async fn mark_file_as_deleted(id: DriveId) -> StdResult<(), MarkFileAsDeletedError>;
     async fn mark_file_for_keeping_local(
@@ -148,6 +148,8 @@ pub mod errors {
     pub enum GetFileListError {
         #[error("Other")]
         Other,
+        #[error("Element with ID not found")]
+        NotFound,
     }
 
     #[derive(Debug, Serialize, Deserialize, thiserror::Error)]

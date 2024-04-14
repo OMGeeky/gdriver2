@@ -13,6 +13,7 @@ type Result<T> = StdResult<T, Box<dyn Error>>;
 #[tokio::main]
 async fn main() -> Result<()> {
     gdriver_common::tracing_setup::init_tracing();
+    check_setup()?;
     // service::start().await?;
     let mount_options = &[MountOption::RW];
     let (tx, rx) = channel(1);
@@ -26,6 +27,16 @@ async fn main() -> Result<()> {
         .await?;
     Ok(())
 }
+
+fn check_setup() -> Result<()> {
+    // let _ = std::env::var("GOOGLE_APPLICATION_CREDENTIALS")
+    //     .map_err(|_| "GOOGLE_APPLICATION_CREDENTIALS env var not set")?;
+    let _ = &*filesystem::GDRIVER_GROUP_ID;
+    let _ = &*filesystem::USER_ID;
+
+    Ok(())
+}
+
 pub mod prelude;
 mod sample;
 

@@ -87,16 +87,24 @@ impl GDriverService for GdriverServer {
         context: Context,
         id: DriveId,
     ) -> StdResult<Vec<ReadDirResult>, GetFileListError> {
-        Err(GetFileListError::Other)
+        self.list_files_in_directory_with_offset(context, id, 0)
+            .await
     }
-
+    #[instrument(skip(self, _context))]
     async fn list_files_in_directory_with_offset(
         self,
-        context: Context,
+        _context: Context,
         id: DriveId,
-        offset: u64,
+        offset: usize,
     ) -> StdResult<Vec<ReadDirResult>, GetFileListError> {
-        Err(GetFileListError::Other)
+        let drive = self.drive.lock().await;
+        info!("Listing files in dir");
+        let children = drive
+            .path_resolver
+            .get_children(&id)
+            .map_err(|_| GetFileListError::NotFound)?
+            .clone();
+        Ok(children.into_iter().skip(offset).collect())
     }
 
     async fn mark_file_as_deleted(

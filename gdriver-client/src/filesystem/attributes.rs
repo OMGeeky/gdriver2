@@ -1,10 +1,13 @@
+use crate::filesystem::{GDRIVER_GROUP_ID, USER_ID};
 use crate::prelude::*;
 use fuser::FileType;
-use gdriver_common::drive_structure::meta::{read_metadata_file, FileKind, Metadata};
+use gdriver_common::drive_structure::meta::{read_metadata_file, FileKind, Metadata, TIMESTAMP};
+use gdriver_common::time_utils;
+use gdriver_common::time_utils::time_from_system_time;
 use std::collections::BTreeMap;
 use std::os::raw::c_int;
 use std::path::Path;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::SystemTime;
 use tarpc::serde::{Deserialize, Serialize};
 
 type Inode = u64;
@@ -78,36 +81,17 @@ fn time_now() -> (i64, u32) {
     time_from_system_time(&SystemTime::now())
 }
 
-fn system_time_from_time(secs: i64, nsecs: u32) -> SystemTime {
-    if secs >= 0 {
-        UNIX_EPOCH + Duration::new(secs as u64, nsecs)
-    } else {
-        UNIX_EPOCH - Duration::new((-secs) as u64, nsecs)
-    }
-}
-
-fn time_from_system_time(system_time: &SystemTime) -> (i64, u32) {
-    // Convert to signed 64-bit time with epoch at 0
-    match system_time.duration_since(UNIX_EPOCH) {
-        Ok(duration) => (duration.as_secs() as i64, duration.subsec_nanos()),
-        Err(before_epoch_error) => (
-            -(before_epoch_error.duration().as_secs() as i64),
-            before_epoch_error.duration().subsec_nanos(),
-        ),
-    }
-}
-
 #[derive(Serialize, Deserialize)]
 pub(crate) struct InodeAttributes {
     pub inode: Inode,
     pub open_file_handles: u64, // Ref count of open file handles to this inode
     pub size: u64,
-    pub last_accessed: (i64, u32),
-    pub last_modified: (i64, u32),
-    pub last_metadata_changed: (i64, u32),
+    pub last_accessed: TIMESTAMP,
+    pub last_modified: TIMESTAMP,
+    pub last_metadata_changed: TIMESTAMP,
     pub kind: FileKind,
     // Permissions and special mode bits
-    pub mode: u16,
+    pub permissions: u16,
     pub hardlinks: u32,
     pub uid: u32,
     pub gid: u32,
@@ -126,11 +110,11 @@ pub(crate) fn read_inode_attributes_from_metadata(
         last_modified: metadata.last_modified,
         last_metadata_changed: metadata.last_metadata_changed,
         kind: metadata.kind,
-        mode: metadata.mode,
-        hardlinks: metadata.hardlinks,
-        uid: metadata.uid,
-        gid: metadata.gid,
-        xattrs: metadata.xattrs,
+        permissions: metadata.permissions,
+        hardlinks: 0,
+        uid: *USER_ID,
+        gid: *GDRIVER_GROUP_ID,
+        xattrs: metadata.extra_attributes,
     }
 }
 pub(crate) fn read_inode_attributes_from_meta_file(
@@ -152,15 +136,21 @@ impl From<InodeAttributes> for fuser::FileAttr {
             ino: attrs.inode,
             size: attrs.size,
             blocks: (attrs.size + BLOCK_SIZE - 1) / BLOCK_SIZE,
-            atime: system_time_from_time(attrs.last_accessed.0, attrs.last_accessed.1),
-            mtime: system_time_from_time(attrs.last_modified.0, attrs.last_modified.1),
-            ctime: system_time_from_time(
+            atime: time_utils::system_time_from_timestamp(
+                attrs.last_accessed.0,
+                attrs.last_accessed.1,
+            ),
+            mtime: time_utils::system_time_from_timestamp(
+                attrs.last_modified.0,
+                attrs.last_modified.1,
+            ),
+            ctime: time_utils::system_time_from_timestamp(
                 attrs.last_metadata_changed.0,
                 attrs.last_metadata_changed.1,
             ),
             crtime: SystemTime::UNIX_EPOCH,
             kind: attrs.kind.into_ft(),
-            perm: attrs.mode,
+            perm: attrs.permissions,
             nlink: attrs.hardlinks,
             uid: attrs.uid,
             gid: attrs.gid,

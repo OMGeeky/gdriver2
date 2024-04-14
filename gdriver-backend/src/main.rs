@@ -24,7 +24,7 @@ async fn main() -> Result<()> {
     SETTINGS.initialize_dirs()?;
     let root_meta_file = SETTINGS.get_metadata_file_path(&ROOT_ID);
     let root_meta = meta::Metadata::root();
-    meta::write_metadata_file(&root_meta_file, &root_meta)?;
+    meta::write_metadata_file_to_path(&root_meta_file, &root_meta)?;
 
     //   sample::main().await?;
     service::start().await?;

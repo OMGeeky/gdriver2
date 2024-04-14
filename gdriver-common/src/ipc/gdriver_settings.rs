@@ -45,6 +45,9 @@ impl GDriverSettings {
     pub fn get_changes_file_path(&self) -> PathBuf {
         self.data_path.join("changes.txt")
     }
+    pub fn get_path_resolver_file_path(&self) -> PathBuf {
+        self.data_path.join("relations.json")
+    }
 
     pub fn get_metadata_file_path(&self, id: &DriveId) -> PathBuf {
         self.metadata_path.join(id.as_ref()).with_extension("meta")

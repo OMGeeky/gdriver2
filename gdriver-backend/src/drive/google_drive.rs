@@ -1,6 +1,8 @@
 use crate::prelude::*;
 use chrono::{DateTime, Utc};
 use const_format::formatcp;
+use gdriver_common::drive_structure::meta::{FileKind, FileState, Metadata};
+use gdriver_common::time_utils::datetime_to_timestamp;
 use gdriver_common::{ipc::gdriver_service::SETTINGS, prelude::*};
 use google_drive3::api::File;
 use google_drive3::{
@@ -14,16 +16,16 @@ use std::any::type_name;
 use std::fmt::{Debug, Display, Formatter};
 use tokio::fs;
 
-const FIELDS_FILE: &'static str = "id, name, size, mimeType, kind, md5Checksum, parents, trashed, createdTime, modifiedTime, viewedByMeTime";
+const FIELDS_FILE: &'static str = "id, name, size, mimeType, kind, md5Checksum, parents, trashed, createdTime, modifiedTime, viewedByMeTime, capabilities";
 #[derive(Ord, PartialOrd, Eq, PartialEq, Debug, Serialize, Deserialize, Clone, Hash)]
 pub struct FileData {
     pub id: String,
     pub name: String,
     pub size: Option<i64>,
     pub mime_type: String,
-    pub kind: String,
+    pub kind: FileKind,
     pub md5_checksum: Option<String>,
-    pub parents: Option<Vec<String>>,
+    pub parents: Vec<String>,
     pub trashed: Option<bool>,
     pub created_time: Option<DateTime<Utc>>,
     pub modified_time: Option<DateTime<Utc>>,
@@ -31,15 +33,43 @@ pub struct FileData {
 }
 
 impl FileData {
+    pub(crate) fn into_meta(self) -> Result<Metadata> {
+        let last_modified = datetime_to_timestamp(self.modified_time.unwrap_or_default())?;
+        Ok(Metadata {
+            id: self.id.into(),
+            kind: self.kind,
+            size: self.size.unwrap_or_default() as u64,
+            last_accessed: datetime_to_timestamp(self.viewed_by_me_time.unwrap_or_default())?,
+            last_modified,
+            extra_attributes: Default::default(),
+            state: FileState::MetadataOnly,
+            permissions: 0, //TODO: parse permissions
+            last_metadata_changed: last_modified,
+        })
+    }
+}
+
+impl FileData {
     fn convert_from_api_file(file: File) -> Self {
+        let kind = file.kind.unwrap_or_default();
+        info!(
+            "Converting file with id {:?} with parent: {:?}",
+            file.id, file.parents
+        );
+        let kind = match kind.as_str() {
+            "drive#file" => FileKind::File,
+            "drive#folder" => FileKind::Directory,
+            "drive#link" => FileKind::Symlink,
+            _ => todo!("Handle kind: {}", kind),
+        };
         Self {
             id: file.id.unwrap_or_default(),
             name: file.name.unwrap_or_default(),
             size: file.size,
             mime_type: file.mime_type.unwrap_or_default(),
-            kind: file.kind.unwrap_or_default(),
+            kind,
             md5_checksum: file.md5_checksum,
-            parents: file.parents,
+            parents: file.parents.unwrap_or(vec![ROOT_ID.0.clone()]),
             trashed: file.trashed,
             created_time: file.created_time,
             modified_time: file.modified_time,
@@ -55,6 +85,7 @@ const FIELDS_CHANGE: &str = formatcp!(
 pub struct GoogleDrive {
     hub: DriveHub<HttpsConnector<HttpConnector>>,
     changes_start_page_token: Option<String>,
+    root_alt_id: DriveId,
 }
 
 impl GoogleDrive {
@@ -79,6 +110,10 @@ impl GoogleDrive {
                     body.files
                         .unwrap_or_default()
                         .into_iter()
+                        .map(|mut f| {
+                            self.map_in_file(Some(&mut f));
+                            f
+                        })
                         .map(FileData::convert_from_api_file),
                 );
             } else {
@@ -117,12 +152,30 @@ impl GoogleDrive {
         );
         let hub = DriveHub::new(http_client, auth);
 
-        let drive = GoogleDrive {
+        let mut drive = GoogleDrive {
             hub,
             changes_start_page_token: None,
+            root_alt_id: ROOT_ID.clone(),
         };
-        trace!("Successfully initialized {}", drive);
+        info!("Updating ROOT alt");
+        drive.update_alt_root().await?;
+        info!("Updated ROOT alt to {}", drive.root_alt_id);
+        trace!("Successfully initialized {:?}", drive);
         Ok(drive)
+    }
+    async fn update_alt_root(&mut self) -> Result<()> {
+        let (response, body) = self
+            .hub
+            .files()
+            .get(ROOT_ID.as_ref())
+            .param("fields", "id")
+            .doit()
+            .await?;
+        if response.status().is_success() {
+            self.root_alt_id = body.id.unwrap_or(ROOT_ID.to_string()).into();
+        }
+
+        Ok(())
     }
     #[instrument]
     pub(crate) async fn ping(&self) -> Result<()> {
@@ -183,9 +236,13 @@ impl GoogleDrive {
                 return Err("Could not get changes".into());
             }
         }
+        changes
+            .iter_mut()
+            .for_each(|change| self.map_id_in_change(change));
         trace!("Got {} changes", changes.len());
         Ok(changes)
     }
+
     async fn set_change_start_token(&mut self, token: String) -> Result<()> {
         info!("Setting start page token: {}", token);
         fs::write(SETTINGS.get_changes_file_path(), token.clone()).await?;
@@ -245,13 +302,41 @@ impl GoogleDrive {
         }
     }
     //endregion
-}
+    //region map alt_root_id to ROOT_ID
+    fn map_id_in_change(&self, i: &mut Change) {
+        i.file_id.as_mut().map(|id| self.map_id(id));
+        let file = i.file.as_mut();
+        self.map_in_file(file);
+    }
 
+    fn map_in_file(&self, file: Option<&mut File>) {
+        file.map(|f| {
+            f.parents.as_mut().map(|parents| {
+                parents
+                    .iter_mut()
+                    .inspect(|i| println!("parent: {i}"))
+                    .for_each(|id| self.map_id(id))
+            });
+            f.id.as_mut().map(|id| self.map_id(id));
+        });
+    }
+
+    fn map_id(&self, id: &mut String) {
+        if self.root_alt_id.0.eq(id) {
+            info!("replacing {id} with {}", ROOT_ID.as_ref());
+            *id = ROOT_ID.0.clone();
+        } else {
+            info!("{id} did not match {}", self.root_alt_id);
+        }
+    }
+    //endregion
+}
 //region debug & display traits
 impl Debug for GoogleDrive {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct(type_name::<GoogleDrive>())
             .field("changes_start_page_token", &self.changes_start_page_token)
+            .field("root_alt_id", &self.root_alt_id)
             .finish()
     }
 }

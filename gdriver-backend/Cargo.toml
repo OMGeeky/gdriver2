@@ -12,10 +12,11 @@ serde.workspace = true
 tarpc.workspace = true
 futures.workspace = true
 chrono.workspace = true
-lazy_static = "1.4.0"
+lazy_static.workspace = true
 thiserror = "1.0.56"
 google-drive3 = "5.0.4"
 const_format = "0.2"
+serde_json = "1.0.115"
 
 [dependencies.gdriver-common]
 path = "../gdriver-common"
