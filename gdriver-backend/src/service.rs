@@ -20,8 +20,21 @@ impl GDriverService for GdriverServer {
     //     todo!()
     // }
 
-    async fn get_file_by_name(self, context: Context, name: OsString, parent: DriveId) -> StdResult<DriveId, GetFileByPathError> {
-        todo!()
+    async fn get_file_by_name(
+        self,
+        context: Context,
+        name: OsString,
+        parent: DriveId,
+    ) -> StdResult<DriveId, GetFileByPathError> {
+        let mut drive_lock = self.drive.lock().await;
+        let x = drive_lock.path_resolver.get_id_from_parent_and_name(
+            name.to_str().ok_or(GetFileByPathError::InvalidName)?,
+            &parent,
+        );
+        match x {
+            None => Err(GetFileByPathError::NotFound),
+            Some(id) => Ok(id),
+        }
     }
 
     async fn get_file_by_path(
@@ -29,7 +42,7 @@ impl GDriverService for GdriverServer {
         context: Context,
         path: PathBuf,
     ) -> StdResult<DriveId, GetFileByPathError> {
-        todo!()
+        Err(GetFileByPathError::Other)
     }
 
     async fn write_local_change(
@@ -37,7 +50,7 @@ impl GDriverService for GdriverServer {
         context: Context,
         id: DriveId,
     ) -> StdResult<(), WriteLocalChangeError> {
-        todo!()
+        Err(WriteLocalChangeError::Other)
     }
 
     async fn get_metadata_for_file(
@@ -45,7 +58,7 @@ impl GDriverService for GdriverServer {
         context: Context,
         id: DriveId,
     ) -> StdResult<(), GetMetadataError> {
-        todo!()
+        Err(GetMetadataError::Other)
     }
 
     async fn download_content_for_file(
@@ -53,7 +66,7 @@ impl GDriverService for GdriverServer {
         context: Context,
         id: DriveId,
     ) -> StdResult<(), GetContentError> {
-        todo!()
+        Err(GetContentError::Other)
     }
 
     async fn list_files_in_directory(
@@ -78,7 +91,7 @@ impl GDriverService for GdriverServer {
         context: Context,
         id: DriveId,
     ) -> StdResult<(), MarkFileAsDeletedError> {
-        todo!()
+        Err(MarkFileAsDeletedError::Other)
     }
 
     async fn mark_file_for_keeping_local(
@@ -86,7 +99,7 @@ impl GDriverService for GdriverServer {
         context: Context,
         id: DriveId,
     ) -> StdResult<(), MarkFileForKeepingLocalError> {
-        todo!()
+        Err(MarkFileForKeepingLocalError::Other)
     }
 
     async fn unmark_file_for_keeping_local(
@@ -94,7 +107,7 @@ impl GDriverService for GdriverServer {
         context: Context,
         id: DriveId,
     ) -> StdResult<(), UnmarkFileForKeepingLocalError> {
-        todo!()
+        Err(UnmarkFileForKeepingLocalError::Other)
     }
 
     #[doc = " Returns true if the file was had remote changes and was updadet"]
@@ -103,7 +116,7 @@ impl GDriverService for GdriverServer {
         context: Context,
         id: DriveId,
     ) -> StdResult<bool, UpdateChangesError> {
-        todo!()
+        Err(UpdateChangesError::Other)
     }
 
     async fn update_changes(self, context: Context) -> StdResult<(), UpdateChangesError> {
@@ -174,7 +187,16 @@ pub async fn start() -> Result<()> {
     let config = &CONFIGURATION;
     info!("Config: {:?}", **config);
 
-    let drive = Drive::new();
+    let drive = Drive::new().await?;
+    match drive.ping().await {
+        Ok(_) => {
+            info!("Can reach google drive api.");
+        }
+        Err(e) => {
+            error!("Cannot reach google drive api.");
+            return Err(e);
+        }
+    }
     let m = Arc::new(Mutex::new(drive));
 
     let server_addr = (config.ip, config.port);

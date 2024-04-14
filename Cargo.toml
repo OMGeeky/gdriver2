@@ -1,20 +1,20 @@
 [workspace]
 members = [
-  "gdriver-common",
-  "gdriver-backend",
-  "gdriver-client",
+    "gdriver-common",
+    "gdriver-backend",
+    "gdriver-client",
 ]
-resolver="2"
+resolver = "2"
 
 [workspace.dependencies]
-tracing="0.1"
-tokio={ version = "1.35", features = ["rt-multi-thread", "tracing", "fs", "macros"] }
-serde={ version = "1.0", features = ["serde_derive"] }
+tracing = "0.1"
+tokio = { version = "1.35", features = ["rt-multi-thread", "tracing", "fs", "macros", "signal"] }
+serde = { version = "1.0", features = ["serde_derive"] }
 tarpc = { version = "0.34", features = ["full"] }
-futures="0.3"
-lazy_static="1.4"
-chrono="0.4"
+futures = "0.3"
+lazy_static = "1.4"
+chrono = "0.4"
 
 [patch.crates-io]
 #tarpc = {path = "../../Documents/git/OMGeeky/tarpc/tarpc/"}
-tarpc = {git = "https://github.com/google/tarpc.git"}
+tarpc = { git = "https://github.com/google/tarpc.git" }

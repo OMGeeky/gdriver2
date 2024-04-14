@@ -1,24 +1,22 @@
+use crate::filesystem::attributes::{read_inode_attributes_from_meta_file, ConvertFileType};
+use crate::filesystem::errors::FilesystemError;
+use crate::prelude::macros::*;
+use crate::prelude::*;
+use anyhow::anyhow;
+use bimap::BiMap;
+use fuser::{KernelConfig, ReplyAttr, ReplyDirectory, ReplyEntry, Request};
+use gdriver_common::drive_structure::drive_id::DriveId;
+use gdriver_common::drive_structure::drive_id::ROOT_ID;
+use gdriver_common::ipc::gdriver_service::errors::GDriverServiceError;
+use gdriver_common::ipc::gdriver_service::GDriverServiceClient;
+use gdriver_common::ipc::gdriver_service::SETTINGS;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::os::raw::c_int;
 use std::time::Duration;
-
-use anyhow::anyhow;
-use bimap::BiMap;
-use fuser::{KernelConfig, ReplyEntry, Request};
-use tracing::*;
-
-use gdriver_common::drive_structure::drive_id::{DriveId, ROOT_ID};
-use gdriver_common::drive_structure::meta::read_metadata_file;
-use gdriver_common::ipc::gdriver_service::{
-    errors::GDriverServiceError, GDriverServiceClient, GDriverSettings,
-};
-
-use crate::filesystem::attributes::read_inode_attributes_from_meta_file;
-use crate::filesystem::errors::FilesystemError;
-use crate::prelude::macros::*;
-use crate::prelude::*;
 use tarpc::context::current as current_context;
+use tokio::sync::mpsc::Receiver;
 
 mod macros;
 
@@ -32,26 +30,33 @@ struct FileIdentifier {
     parent: Inode,
     name: OsString,
 }
-
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, Hash, Ord, PartialOrd, Eq, PartialEq)]
+pub enum ShutdownRequest {
+    Gracefully,
+    Force,
+}
 pub struct Filesystem {
     gdriver_client: GDriverServiceClient,
 
     entry_ids: BiMap<Inode, DriveId>,
     ino_to_file_handles: HashMap<Inode, Vec<u64>>,
     next_ino: u64,
-    gdriver_settings: GDriverSettings,
     entry_name_parent_to_ino: BiMap<FileIdentifier, Inode>,
+    shutdown_signal_receiver: Receiver<ShutdownRequest>,
 }
 
 impl Filesystem {
-    pub fn new(gdriver_client: GDriverServiceClient) -> Self {
+    pub fn new(
+        gdriver_client: GDriverServiceClient,
+        shutdown_signal_receiver: Receiver<ShutdownRequest>,
+    ) -> Self {
         Self {
             gdriver_client,
             entry_ids: BiMap::new(),
             ino_to_file_handles: HashMap::new(),
             next_ino: 222,
-            gdriver_settings: GDriverSettings::default(),
             entry_name_parent_to_ino: BiMap::new(),
+            shutdown_signal_receiver,
         }
     }
     fn generate_ino(&mut self) -> Inode {
@@ -93,23 +98,26 @@ mod attributes;
 
 impl fuser::Filesystem for Filesystem {
     //region init
+    #[instrument(skip(self, _req, _config))]
     fn init(&mut self, _req: &Request<'_>, _config: &mut KernelConfig) -> StdResult<(), c_int> {
         self.entry_ids.insert(1, ROOT_ID.clone());
-        self.gdriver_settings = send_request!(self.gdriver_client.get_settings(current_context()))
+
+        send_request!(self.gdriver_client.update_changes(current_context()))
             .map_err(|e| {
-                error!("Got a connection error while fetching settings: {e}");
-                libc::ECONNREFUSED
+                error!("Got a connection error while updating changes for on init. ");
+                dbg!(e);
+                libc::ECANCELED
             })?
             .map_err(|e| {
-                error!("Got an error while fetching settings: {e}");
-                trace!("details: {e:?}");
-                libc::EBADMSG
+                error!("Error while updating changes on init");
+                dbg!(e);
+                libc::EIO
             })?;
-
         Ok(())
     }
     //endregion
     //region lookup
+    #[instrument(skip(self, _req, reply))]
     fn lookup(&mut self, _req: &Request<'_>, parent: u64, name: &OsStr, reply: ReplyEntry) {
         let metadata = utils::lookup::lookup(self, parent, name.to_os_string());
         match metadata {
@@ -133,6 +141,67 @@ impl fuser::Filesystem for Filesystem {
         }
     }
     //endregion
+    #[instrument(skip(self, _req, reply))]
+    fn getattr(&mut self, _req: &Request<'_>, ino: u64, reply: ReplyAttr) {
+        let id = self.get_id_from_ino(ino);
+        info!("Reading dir: {id:?}/{ino}");
+        match id {
+            None => {}
+            Some(id) => {
+                let result = utils::get_attributes(self, id, ino);
+                match result {
+                    Ok(attr) => {
+                        reply.attr(&TTL, &attr.into());
+                    }
+                    Err(e) => {
+                        error!("Got an error during readdir: {}", e);
+                        dbg!(e);
+                        reply.error(libc::EIO);
+                    }
+                }
+            }
+        }
+    }
+    #[instrument(skip(self, _req, reply))]
+    fn readdir(
+        &mut self,
+        _req: &Request<'_>,
+        ino: u64,
+        _fh: u64,
+        offset: i64,
+        mut reply: ReplyDirectory,
+    ) {
+        let id = self.get_id_from_ino(ino);
+        info!("Reading dir: {id:?}/{ino}");
+        match id {
+            None => {}
+            Some(id) => {
+                let result = utils::readdir::readdir(self, id.clone(), offset as u64);
+                match result {
+                    Ok(entries) => {
+                        let mut counter = 0;
+                        for entry in entries {
+                            let ino = self.get_ino_from_id(entry.id);
+                            counter += 1;
+                            let buffer_full =
+                                reply.add(ino, counter, entry.kind.into_ft(), entry.name);
+                            if buffer_full {
+                                debug!("Buffer full after {counter}");
+                                break;
+                            }
+                        }
+                        debug!("sending ok");
+                        reply.ok();
+                    }
+                    Err(e) => {
+                        error!("Got an error during readdir: {}", e);
+                        dbg!(e);
+                        reply.error(libc::EIO);
+                    }
+                }
+            }
+        }
+    }
 }
 mod errors {
     use gdriver_common::ipc::gdriver_service::errors::GDriverServiceError;
@@ -155,6 +224,7 @@ mod errors {
 }
 mod utils {
     use super::*;
+    use crate::filesystem::attributes::InodeAttributes;
     pub mod lookup {
         use super::*;
         use crate::filesystem::attributes::InodeAttributes;
@@ -205,16 +275,39 @@ mod utils {
                         .clone();
                 }
             }
-            let open_file_handles =
-                fs.ino_to_file_handles.get(&ino).map(Vec::len).unwrap_or(0) as u64;
-            send_request!(fs
-                .gdriver_client
-                .get_metadata_for_file(current_context(), id.clone()))?
+            get_attributes(fs, &id, ino)
+        }
+    }
+    pub(crate) fn get_attributes(
+        fs: &Filesystem,
+        id: &DriveId,
+        ino: Inode,
+    ) -> StdResult<InodeAttributes, FilesystemError> {
+        let open_file_handles = fs.ino_to_file_handles.get(&ino).map(Vec::len).unwrap_or(0) as u64;
+        send_request!(fs
+            .gdriver_client
+            .get_metadata_for_file(current_context(), id.clone()))?
+        .map_err(GDriverServiceError::from)?;
+        let meta_path = SETTINGS.get_metadata_file_path(&id);
+        let metadata = read_inode_attributes_from_meta_file(&meta_path, ino, open_file_handles)
+            .map_err(FilesystemError::IO)?;
+        Ok(metadata)
+    }
+    pub mod readdir {
+        use super::*;
+        pub fn readdir(
+            fs: &mut Filesystem,
+            id: DriveId,
+            offset: u64,
+        ) -> StdResult<Vec<gdriver_common::ipc::gdriver_service::ReadDirResult>, FilesystemError>
+        {
+            let res = send_request!(fs.gdriver_client.list_files_in_directory_with_offset(
+                current_context(),
+                id,
+                offset as u64
+            ))?
             .map_err(GDriverServiceError::from)?;
-            let meta_path = fs.gdriver_settings.get_metadata_file_path(&id);
-            let metadata = read_inode_attributes_from_meta_file(&meta_path, ino, open_file_handles)
-                .map_err(FilesystemError::IO)?;
-            Ok(metadata)
+            Ok(res)
         }
     }
 }

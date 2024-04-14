@@ -8,6 +8,7 @@ use tarpc::{
 };
 
 mod drive;
+mod path_resolver;
 mod prelude;
 mod sample;
 mod service;

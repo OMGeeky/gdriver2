@@ -1,13 +1,27 @@
+use fuser::{MountOption, Session, SessionUnmounter};
 use std::{error::Error, net::IpAddr, result::Result as StdResult};
+use tokio::sync::mpsc::{channel, Sender};
 
+use crate::filesystem::{Filesystem, ShutdownRequest};
 use gdriver_common::{ipc::sample::*, prelude::*};
 use tarpc::{client, tokio_serde::formats::Json};
+use tokio::task::JoinHandle;
 
 type Result<T> = StdResult<T, Box<dyn Error>>;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    service::start().await?;
+    gdriver_common::tracing_setup::init_tracing();
+    // service::start().await?;
+    let mount_options = &[MountOption::RW];
+    let (tx, rx) = channel(1);
+    let f = Filesystem::new(
+        service::create_client(CONFIGURATION.ip, CONFIGURATION.port).await?,
+        rx,
+    );
+    mount(f, &"/var/tmp/gdriver2_mount", mount_options, tx)
+        .await?
+        .await?;
     Ok(())
 }
 pub mod prelude;
@@ -15,3 +29,40 @@ mod sample;
 
 mod filesystem;
 mod service;
+
+async fn mount(
+    fs: Filesystem,
+    mountpoint: &str,
+    options: &[MountOption],
+    sender: Sender<ShutdownRequest>,
+) -> Result<JoinHandle<()>> {
+    let mut session = Session::new(fs, mountpoint.as_ref(), options)?;
+    let session_ender = session.unmount_callable();
+    let end_program_signal_handle = tokio::spawn(async move {
+        let _ = end_program_signal_awaiter(sender, session_ender).await;
+    });
+    debug!("Mounting fuse filesystem");
+    let _ = session.run();
+    debug!("Stopped with mounting");
+    // Ok(session_ender)
+    Ok(end_program_signal_handle)
+}
+
+async fn end_program_signal_awaiter(
+    sender: Sender<ShutdownRequest>,
+    mut session_unmounter: SessionUnmounter,
+) -> Result<()> {
+    info!("Waiting for Ctrl-C");
+    println!("Waiting for Ctrl-C");
+    tokio::signal::ctrl_c()
+        .await
+        .expect("failed to listen for ctrl_c event");
+    println!(); //to not have ^C on the same line as the next log if it is directly in a console
+    info!("got signal to end program");
+    sender.send(ShutdownRequest::Gracefully).await?;
+    info!("sent stop command to file uploader");
+    info!("unmounting...");
+    session_unmounter.unmount()?;
+    info!("unmounted");
+    Ok(())
+}
