@@ -1,13 +1,12 @@
 use crate::prelude::*;
 use const_format::formatcp;
-use gdriver_common::ipc::gdriver_service::SETTINGS;
-use gdriver_common::prelude::*;
-use google_drive3::api::{Change, File, Scope, StartPageToken};
-use google_drive3::hyper::client::HttpConnector;
-use google_drive3::hyper::{Body, Client, Response};
-use google_drive3::hyper_rustls::HttpsConnector;
-use google_drive3::DriveHub;
-use google_drive3::{hyper_rustls, oauth2};
+use gdriver_common::{ipc::gdriver_service::SETTINGS, prelude::*};
+use google_drive3::{
+    api::{Change, Scope},
+    hyper::{client::HttpConnector, Client},
+    hyper_rustls::{self, HttpsConnector},
+    oauth2, DriveHub,
+};
 use std::any::type_name;
 use std::fmt::{Debug, Display, Formatter};
 use tokio::fs;
