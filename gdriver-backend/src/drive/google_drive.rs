@@ -13,7 +13,9 @@ use std::fmt::{Debug, Display, Formatter};
 use tokio::fs;
 
 const FIELDS_FILE: &'static str = "id, name, size, mimeType, kind, md5Checksum, parents, trashed, createdTime, modifiedTime, viewedByMeTime";
-const FIELDS_CHANGE: &str = formatcp!("changes(removed, fileId, changeType, file({FIELDS_FILE}))");
+const FIELDS_CHANGE: &str = formatcp!(
+    "nextPageToken, newStartPageToken, changes(removed, fileId, changeType, file({FIELDS_FILE}))"
+);
 #[derive(Clone)]
 pub struct GoogleDrive {
     hub: DriveHub<HttpsConnector<HttpConnector>>,
@@ -80,6 +82,7 @@ impl GoogleDrive {
     //region changes
     #[instrument]
     pub async fn get_changes(&mut self) -> Result<Vec<Change>> {
+        info!("Getting changes");
         let mut page_token = Some(self.change_start_token().await?);
         let mut changes = Vec::new();
         while let Some(current_page_token) = page_token {
@@ -97,7 +100,9 @@ impl GoogleDrive {
                 .include_items_from_all_drives(false)
                 .doit()
                 .await?;
-            self.changes_start_page_token = body.new_start_page_token;
+            if let Some(token) = body.new_start_page_token {
+                self.changes_start_page_token = Some(token);
+            }
             if response.status().is_success() {
                 changes.extend(body.changes.unwrap_or_default());
                 page_token = body.next_page_token;
@@ -113,7 +118,7 @@ impl GoogleDrive {
     async fn change_start_token(&mut self) -> Result<String> {
         Ok(match &self.changes_start_page_token {
             None => {
-                //
+                info!("Getting start page token");
                 let token = fs::read_to_string(SETTINGS.get_changes_file_path())
                     .await
                     .unwrap_or_default();
@@ -122,14 +127,19 @@ impl GoogleDrive {
                 } else {
                     Some(self.get_changes_start_token_from_api().await?)
                 };
+                info!("Got start page token: {:?}", self.changes_start_page_token);
                 self.changes_start_page_token
                     .clone()
                     .expect("We just set it")
             }
-            Some(start_token) => start_token.clone(),
+            Some(start_token) => {
+                info!("Using cached start page token");
+                start_token.clone()
+            }
         })
     }
     async fn get_changes_start_token_from_api(&self) -> Result<String> {
+        info!("Getting start page token from API");
         let (response, body) = self
             .hub
             .changes()

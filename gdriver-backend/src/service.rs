@@ -58,6 +58,9 @@ impl GDriverService for GdriverServer {
         context: Context,
         id: DriveId,
     ) -> StdResult<(), GetMetadataError> {
+        if id == *ROOT_ID {
+            return Ok(());
+        }
         Err(GetMetadataError::Other)
     }
 
@@ -119,7 +122,7 @@ impl GDriverService for GdriverServer {
         Err(UpdateChangesError::Other)
     }
 
-    async fn update_changes(self, context: Context) -> StdResult<(), UpdateChangesError> {
+    async fn update_changes(self, _context: Context) -> StdResult<(), UpdateChangesError> {
         let drive = self.drive.try_lock();
         match drive {
             Ok(mut drive) => {
@@ -128,12 +131,13 @@ impl GDriverService for GdriverServer {
                     dbg!(e);
                     UpdateChangesError::Remote
                 })?;
+                Ok(())
             }
             Err(_) => {
-                return Err(UpdateChangesError::Running);
+                info!("Drive is already updating");
+                Err(UpdateChangesError::Running)
             }
         }
-        Ok(())
     }
 
     async fn do_something2(

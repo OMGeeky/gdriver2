@@ -1,4 +1,4 @@
-use crate::prelude::DriveId;
+use crate::prelude::*;
 use crate::project_dirs::PROJECT_DIRS;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -10,7 +10,24 @@ pub struct GDriverSettings {
     downloaded_path: PathBuf,
     data_path: PathBuf,
 }
-
+impl GDriverSettings {
+    #[instrument]
+    pub fn initialize_dirs(&self) -> Result<()> {
+        info!("Initializing dirs");
+        let dirs = vec![
+            &self.metadata_path,
+            &self.cache_path,
+            &self.downloaded_path,
+            &self.data_path,
+        ];
+        for dir in dirs {
+            info!("Creating dir: {:?}", dir);
+            std::fs::create_dir_all(dir)?;
+        }
+        info!("Dirs created");
+        Ok(())
+    }
+}
 impl GDriverSettings {
     pub fn metadata_path(&self) -> &Path {
         &self.metadata_path

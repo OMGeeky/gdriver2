@@ -173,6 +173,13 @@ impl fuser::Filesystem for Filesystem {
     ) {
         let id = self.get_id_from_ino(ino);
         info!("Reading dir: {id:?}/{ino}");
+        if let Err(e) = utils::update::update(self) {
+            error!("Got an error during update in readdir: {}", e);
+            dbg!(e);
+            reply.error(libc::EIO);
+            return;
+        }
+
         match id {
             None => {}
             Some(id) => {
@@ -225,6 +232,16 @@ mod errors {
 mod utils {
     use super::*;
     use crate::filesystem::attributes::InodeAttributes;
+    pub mod update {
+        use super::*;
+        #[instrument(skip(fs))]
+        pub fn update(fs: &Filesystem) -> StdResult<(), FilesystemError> {
+            info!("Updating changes");
+            send_request!(fs.gdriver_client.update_changes(current_context(),))?
+                .map_err(GDriverServiceError::from)?;
+            Ok(())
+        }
+    }
     pub mod lookup {
         use super::*;
         use crate::filesystem::attributes::InodeAttributes;
