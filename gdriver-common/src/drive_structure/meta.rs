@@ -1,5 +1,6 @@
 use crate::ipc::gdriver_service::SETTINGS;
 use crate::prelude::*;
+use crate::time_utils::time_now;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fs::File, path::Path};
 
@@ -21,17 +22,19 @@ pub struct Metadata {
     pub extra_attributes: BTreeMap<Vec<u8>, Vec<u8>>,
 }
 
+const PERMISSIONS_RWXRWXRWX: u16 = 0b111_111_111; // 511;
+
 impl Metadata {
     pub fn root() -> Self {
         Self {
             id: ROOT_ID.clone(),
             state: FileState::Root,
             size: 0,
-            last_accessed: (0, 0),
-            last_modified: (0, 0),
-            last_metadata_changed: (0, 0),
+            last_accessed: time_now(),
+            last_modified: time_now(),
+            last_metadata_changed: time_now(),
             kind: FileKind::Directory,
-            permissions: 0,
+            permissions: PERMISSIONS_RWXRWXRWX,
             extra_attributes: Default::default(),
         }
     }

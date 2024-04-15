@@ -183,6 +183,23 @@ impl fuser::Filesystem for Filesystem {
     ) {
         let id = self.get_id_from_ino(ino);
         info!("Reading dir: {id:?}/{ino}");
+        let mut counter = 0;
+        if offset == 0 {
+            counter += 1;
+            let full = reply.add(ino, counter, fuser::FileType::Directory, ".");
+            if full {
+                reply.ok();
+                return;
+            }
+        }
+        if offset + counter == 1 {
+            counter += 1;
+            let full = reply.add(0, counter, fuser::FileType::Directory, "..");
+            if full {
+                reply.ok();
+                return;
+            }
+        }
         if let Err(e) = utils::update::update(self) {
             error!("Got an error during update in readdir: {}", e);
             dbg!(e);
@@ -193,10 +210,9 @@ impl fuser::Filesystem for Filesystem {
         match id {
             None => {}
             Some(id) => {
-                let result = utils::readdir::readdir(self, id.clone(), offset as u64);
+                let result = utils::readdir::readdir(self, id.clone(), (offset + counter) as u64);
                 match result {
                     Ok(entries) => {
-                        let mut counter = 0;
                         for entry in entries {
                             let ino = self.get_ino_from_id(entry.id);
                             counter += 1;

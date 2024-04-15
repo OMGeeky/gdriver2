@@ -77,10 +77,6 @@ fn parse_xattr_namespace(key: &[u8]) -> StdResult<XattrNamespace, c_int> {
 
     return Err(libc::ENOTSUP);
 }
-fn time_now() -> (i64, u32) {
-    time_from_system_time(&SystemTime::now())
-}
-
 #[derive(Serialize, Deserialize)]
 pub(crate) struct InodeAttributes {
     pub inode: Inode,

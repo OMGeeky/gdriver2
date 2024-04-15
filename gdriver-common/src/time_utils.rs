@@ -37,3 +37,7 @@ pub fn time_from_system_time(system_time: &SystemTime) -> (i64, u32) {
         ),
     }
 }
+
+pub fn time_now() -> (i64, u32) {
+    time_from_system_time(&SystemTime::now())
+}
