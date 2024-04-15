@@ -55,7 +55,10 @@ async fn mount(
         let _ = end_program_signal_awaiter(sender, session_ender).await;
     });
     debug!("Mounting fuse filesystem");
-    let _ = session.run();
+    tokio::task::spawn_blocking(move || {
+        let _ = session.run();
+    })
+    .await?;
     debug!("Stopped with mounting");
     // Ok(session_ender)
     Ok(end_program_signal_handle)

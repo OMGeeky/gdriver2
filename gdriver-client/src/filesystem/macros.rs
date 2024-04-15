@@ -38,8 +38,7 @@ mod send_requests {
     macro_rules! send_request {
         ($func:expr ) => {{
             let handle = ::tokio::runtime::Handle::current();
-            let _ = handle.enter();
-            futures::executor::block_on($func)
+            handle.block_on($func)
         }};
     }
     #[macro_export]
