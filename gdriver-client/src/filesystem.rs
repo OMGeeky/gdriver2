@@ -97,9 +97,13 @@ impl Filesystem {
     }
     fn add_id(&mut self, id: DriveId) -> Inode {
         let ino = self.generate_ino();
+        self.add_id_to_inode(id, ino);
+        ino
+    }
+
+    fn add_id_to_inode(&mut self, id: DriveId, ino: Inode) {
         trace!("adding new ino for drive id: {} => {}", id, ino);
         self.entry_ids.insert(ino, id);
-        ino
     }
 }
 
@@ -110,7 +114,7 @@ impl fuser::Filesystem for Filesystem {
     //region init
     #[instrument(skip(self, _req, _config))]
     fn init(&mut self, _req: &Request<'_>, _config: &mut KernelConfig) -> StdResult<(), c_int> {
-        self.entry_ids.insert(1, ROOT_ID.clone());
+        self.add_id_to_inode(ROOT_ID.clone(), 1);
 
         send_request!(self.gdriver_client.update_changes(current_context()))
             .map_err(|e| {
@@ -132,6 +136,7 @@ impl fuser::Filesystem for Filesystem {
         let metadata = utils::lookup::lookup(self, parent, name.to_os_string());
         match metadata {
             Ok(metadata) => {
+                info!("Got metadata: {metadata:?}");
                 reply.entry(&TTL, &metadata.into(), 0);
             }
             Err(e) => {
@@ -154,9 +159,11 @@ impl fuser::Filesystem for Filesystem {
     #[instrument(skip(self, _req, reply))]
     fn getattr(&mut self, _req: &Request<'_>, ino: u64, reply: ReplyAttr) {
         let id = self.get_id_from_ino(ino);
-        info!("Reading dir: {id:?}/{ino}");
+        info!("getting attributes: {id:?}/{ino}");
         match id {
-            None => {}
+            None => {
+                reply.error(libc::ENOENT);
+            }
             Some(id) => {
                 let result = utils::get_attributes(self, id, ino);
                 match result {
@@ -186,15 +193,15 @@ impl fuser::Filesystem for Filesystem {
         let mut counter = 0;
         if offset == 0 {
             counter += 1;
-            let full = reply.add(ino, counter, fuser::FileType::Directory, ".");
+            let full = reply.add(ino, offset + counter, fuser::FileType::Directory, ".");
             if full {
                 reply.ok();
                 return;
             }
         }
-        if offset + counter == 1 {
+        if offset == 1 {
             counter += 1;
-            let full = reply.add(0, counter, fuser::FileType::Directory, "..");
+            let full = reply.add(0, offset + counter, fuser::FileType::Directory, "..");
             if full {
                 reply.ok();
                 return;
@@ -210,14 +217,14 @@ impl fuser::Filesystem for Filesystem {
         match id {
             None => {}
             Some(id) => {
-                let result = utils::readdir::readdir(self, id.clone(), (offset + counter) as u64);
+                let result = utils::readdir::readdir(self, id.clone(), (offset - counter) as u64);
                 match result {
                     Ok(entries) => {
                         for entry in entries {
                             let ino = self.get_ino_from_id(entry.id);
                             counter += 1;
                             let buffer_full =
-                                reply.add(ino, counter, entry.kind.into_ft(), entry.name);
+                                reply.add(ino, offset + counter, entry.kind.into_ft(), entry.name);
                             if buffer_full {
                                 debug!("Buffer full after {counter}");
                                 break;
@@ -275,6 +282,7 @@ mod utils {
         use futures::TryFutureExt;
         use gdriver_common::ipc::gdriver_service::errors::GetFileByPathError;
 
+        #[instrument(skip(fs))]
         pub fn lookup(
             fs: &mut Filesystem,
             parent: Inode,
@@ -283,7 +291,6 @@ mod utils {
             let id: DriveId;
             let ino: Inode;
 
-            let name = name.to_os_string();
             let ino_opt = fs.entry_name_parent_to_ino.get_by_left(&FileIdentifier {
                 parent,
                 name: name.clone(),
@@ -296,14 +303,13 @@ mod utils {
                         .entry_ids
                         .get_by_left(&parent)
                         .ok_or(FilesystemError::NotFound)?;
-                    trace!(
+                    info!(
                         "looking for child of parent:{} with name: {:?}",
-                        parent_id,
-                        name
+                        parent_id, name
                     );
                     id = send_request!(fs.gdriver_client.get_file_by_name(
                         current_context(),
-                        name.to_os_string(),
+                        name,
                         parent_id.clone()
                     ))?
                     .map_err(GDriverServiceError::from)?;
@@ -311,6 +317,7 @@ mod utils {
                     ino = fs.add_id(id.clone());
                 }
                 Some(i) => {
+                    info!("Found ino in cache: {}", i);
                     ino = *i;
                     id = fs
                         .get_id_from_ino(*i)
@@ -321,6 +328,7 @@ mod utils {
             get_attributes(fs, &id, ino)
         }
     }
+    #[instrument(skip(fs))]
     pub(crate) fn get_attributes(
         fs: &Filesystem,
         id: &DriveId,

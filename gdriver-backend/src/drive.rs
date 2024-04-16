@@ -109,6 +109,7 @@ impl Drive {
             todo!("Do something when a file is removed from drive");
             return Ok(());
         }
+        //TODO: deal with locally and remotely changed files
         let mut original_meta = original_meta?;
         self.process_parents_changes(parents, &id, &new_meta)?;
         Self::process_meta_changes(new_meta, &mut original_meta)?;

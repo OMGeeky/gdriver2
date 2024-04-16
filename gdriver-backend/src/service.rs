@@ -117,13 +117,15 @@ impl GDriverService for GdriverServer {
         offset: usize,
     ) -> StdResult<Vec<ReadDirResult>, GetFileListError> {
         let drive = self.drive.lock().await;
-        info!("Listing files in dir");
+        info!("Listing files in dir for id {id} with offset {offset}");
         let children = drive
             .path_resolver
             .get_children(&id)
             .map_err(|_| GetFileListError::NotFound)?
             .clone();
-        Ok(children.into_iter().skip(offset).collect())
+        let children: Vec<_> = children.into_iter().skip(offset).collect();
+        info!("Found {} children", children.len());
+        Ok(children)
     }
 
     #[instrument(skip(self, context))]

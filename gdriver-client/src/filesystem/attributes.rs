@@ -77,7 +77,7 @@ fn parse_xattr_namespace(key: &[u8]) -> StdResult<XattrNamespace, c_int> {
 
     return Err(libc::ENOTSUP);
 }
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct InodeAttributes {
     pub inode: Inode,
     pub open_file_handles: u64, // Ref count of open file handles to this inode
@@ -119,11 +119,10 @@ pub(crate) fn read_inode_attributes_from_meta_file(
     open_file_handles: u64,
 ) -> Result<InodeAttributes> {
     let metadata = read_metadata_file(meta_path)?;
-    Ok(read_inode_attributes_from_metadata(
-        metadata,
-        inode,
-        open_file_handles,
-    ))
+    // info!("converting metadata to inode attributes: {metadata:?}");
+    let inode_attributes = read_inode_attributes_from_metadata(metadata, inode, open_file_handles);
+    // info!("converted metadata to inode attributes: {inode_attributes:?}");
+    Ok(inode_attributes)
 }
 
 impl From<InodeAttributes> for fuser::FileAttr {
