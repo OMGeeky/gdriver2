@@ -1,5 +1,5 @@
-use crate::drive::Drive;
 use crate::prelude::*;
+use gdriver_common::drive_structure::meta::Metadata;
 use gdriver_common::ipc::gdriver_service::{ReadDirResult, SETTINGS};
 use gdriver_common::path_resolve_error::PathResolveError;
 use gdriver_common::prelude::*;
@@ -19,6 +19,9 @@ pub struct PathResolver {
 impl PathResolver {
     pub(crate) fn get_children(&self, id: &DriveId) -> Result<&Vec<ReadDirResult>> {
         self.children.get(id).ok_or("Item with ID not found".into())
+    }
+    pub(crate) fn get_parents(&self, id: &DriveId) -> Result<&Vec<DriveId>> {
+        self.parents.get(id).ok_or("Item with ID not found".into())
     }
 }
 
@@ -61,6 +64,21 @@ impl PathResolver {
         self.write_to_disk()?;
         Ok(())
     }
+    pub(crate) fn add_relationships_for_meta(
+        &mut self,
+        parents: Vec<impl Into<DriveId>>,
+        meta: &Metadata,
+    ) -> Result<()> {
+        let entry = ReadDirResult {
+            id: meta.id.clone().into(),
+            name: meta.name.to_string(),
+            kind: meta.kind.clone(),
+        };
+        for parent in parents {
+            self.add_relationship(parent.into(), entry.clone())?;
+        }
+        Ok(())
+    }
     /// Add a relationship between a parent and a child and write to disk
     pub(crate) fn add_relationship(&mut self, parent: DriveId, entry: ReadDirResult) -> Result<()> {
         match self.parents.get_mut(&entry.id) {
@@ -78,18 +96,23 @@ impl PathResolver {
         self.write_to_disk()?;
         Ok(())
     }
-    /// Remove the relationship between a parent and a child and write to disk
-    pub(crate) fn remove_relationship(
+
+    pub(crate) fn remove_relationships_for_id(
         &mut self,
-        parent: DriveId,
-        entry: ReadDirResult,
+        parents: &Vec<DriveId>,
+        id: &DriveId,
     ) -> Result<()> {
-        self.parents
-            .get_mut(&entry.id)
-            .map(|x| x.retain(|e| e != &parent));
+        for parent in parents {
+            self.remove_relationship(parent, id)?;
+        }
+        Ok(())
+    }
+    /// Remove the relationship between a parent and a child and write to disk
+    pub(crate) fn remove_relationship(&mut self, parent: &DriveId, id: &DriveId) -> Result<()> {
+        self.parents.get_mut(id).map(|x| x.retain(|e| e != parent));
         self.children
-            .get_mut(&parent)
-            .map(|x| x.retain(|e| e.id != entry.id));
+            .get_mut(parent)
+            .map(|x| x.retain(|e| e.id != *id));
         self.write_to_disk()?;
         Ok(())
     }

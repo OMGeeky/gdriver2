@@ -248,6 +248,7 @@ pub async fn start() -> Result<()> {
         }
     }
     drive.get_all_file_metas().await?;
+    drive.update().await?;
     let drive = Arc::new(Mutex::new(drive));
 
     let server_addr = (config.ip, config.port);

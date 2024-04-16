@@ -1,7 +1,7 @@
 use crate::prelude::*;
 use chrono::{DateTime, Utc};
 use const_format::formatcp;
-use gdriver_common::drive_structure::meta::{FileKind, FileState, Metadata};
+use gdriver_common::drive_structure::meta::{FileKind, FileState, Metadata, DEFAULT_PERMISSIONS};
 use gdriver_common::time_utils::datetime_to_timestamp;
 use gdriver_common::{ipc::gdriver_service::SETTINGS, prelude::*};
 use google_drive3::api::File;
@@ -38,19 +38,20 @@ impl FileData {
         Ok(Metadata {
             id: self.id.into(),
             kind: self.kind,
+            name: self.name,
             size: self.size.unwrap_or_default() as u64,
             last_accessed: datetime_to_timestamp(self.viewed_by_me_time.unwrap_or_default())?,
             last_modified,
             extra_attributes: Default::default(),
             state: FileState::MetadataOnly,
-            permissions: 0, //TODO: parse permissions
+            permissions: DEFAULT_PERMISSIONS, //TODO: parse permissions
             last_metadata_changed: last_modified,
         })
     }
 }
 
 impl FileData {
-    fn convert_from_api_file(file: File) -> Self {
+    pub(crate) fn convert_from_api_file(file: File) -> Self {
         let kind = file.kind.unwrap_or_default();
         info!(
             "Converting file with id {:?} with parent: {:?}",
@@ -221,7 +222,7 @@ impl GoogleDrive {
         Err("Did not get expected result on ping".into())
     }
     //region changes
-    #[instrument]
+    #[instrument(skip(self))]
     pub async fn get_changes(&mut self) -> Result<Vec<Change>> {
         info!("Getting changes");
         let mut page_token = Some(self.get_change_start_token().await?);
@@ -260,6 +261,9 @@ impl GoogleDrive {
     }
 
     async fn set_change_start_token(&mut self, token: String) -> Result<()> {
+        if self.changes_start_page_token.as_ref() == Some(&token) {
+            return Ok(());
+        }
         info!("Setting start page token: {}", token);
         fs::write(SETTINGS.get_changes_file_path(), token.clone()).await?;
         self.changes_start_page_token = Some(token);
@@ -297,7 +301,8 @@ impl GoogleDrive {
     pub async fn get_local_change_start_token(&mut self) -> Option<String> {
         self.changes_start_page_token = fs::read_to_string(SETTINGS.get_changes_file_path())
             .await
-            .ok();
+            .ok()
+            .map(|s| s.trim().to_string());
         self.changes_start_page_token.clone()
     }
     async fn update_change_start_token_from_api(&mut self) -> Result<()> {
@@ -342,7 +347,7 @@ impl GoogleDrive {
             info!("replacing {id} with {}", ROOT_ID.as_ref());
             *id = ROOT_ID.0.clone();
         } else {
-            info!("{id} did not match {}", self.root_alt_id);
+            // info!("{id} did not match {}", self.root_alt_id);
         }
     }
     //endregion

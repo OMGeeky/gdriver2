@@ -13,6 +13,7 @@ pub type TIMESTAMP = (i64, u32);
 pub struct Metadata {
     pub id: DriveId,
     pub state: FileState,
+    pub name: String,
     pub size: u64,
     pub last_accessed: TIMESTAMP,
     pub last_modified: TIMESTAMP,
@@ -22,13 +23,15 @@ pub struct Metadata {
     pub extra_attributes: BTreeMap<Vec<u8>, Vec<u8>>,
 }
 
-const PERMISSIONS_RWXRWXRWX: u16 = 0b111_111_111; // 511;
+pub const PERMISSIONS_RWXRWXRWX: u16 = 0o777;
+pub const DEFAULT_PERMISSIONS: u16 = PERMISSIONS_RWXRWXRWX;
 
 impl Metadata {
     pub fn root() -> Self {
         Self {
             id: ROOT_ID.clone(),
             state: FileState::Root,
+            name: "".to_string(),
             size: 0,
             last_accessed: time_now(),
             last_modified: time_now(),
@@ -44,6 +47,10 @@ pub fn read_metadata_file(path: &Path) -> Result<Metadata> {
     debug!("Reading metadata file: {:?}", path);
     let reader = File::open(path)?;
     Ok(serde_json::from_reader(reader)?)
+}
+pub fn read_metadata_by_id(id: &DriveId) -> Result<Metadata> {
+    let path = SETTINGS.get_metadata_file_path(id);
+    read_metadata_file(&path)
 }
 pub fn write_metadata_file(metadata: &Metadata) -> Result<()> {
     let path = SETTINGS.get_metadata_file_path(&metadata.id);

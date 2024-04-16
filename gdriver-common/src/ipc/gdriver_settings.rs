@@ -11,7 +11,7 @@ pub struct GDriverSettings {
     data_path: PathBuf,
 }
 impl GDriverSettings {
-    #[instrument]
+    #[instrument(skip(self))]
     pub fn initialize_dirs(&self) -> Result<()> {
         info!("Initializing dirs");
         let dirs = vec![
